@@ -1,274 +1,220 @@
 """
-Khulna University Bus Tracker (BusPlus)
-User & Driver Management Service (Authentication, Single-Session Lock, & Admin CRUD)
+Driver accounts: admin setup, front-end sign-in with a one-phone lock, and daily duty notices.
+
+Like TrackingService, drivers are kept in memory and every change is written
+through to the `drivers` table. All public methods are thread-safe.
 """
 
-import hmac
+import secrets
 import threading
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-from models.user import DriverUser, StudentUser, get_default_driver_accounts
+from datetime import UTC, datetime, timedelta
+
+from models.records import DriverRecord
+from models.user import DriverUser
+from services import store
+
+
+class LoginError(Exception):
+    """A driver sign-in was refused. `status` is the HTTP status code to answer with."""
+
+    def __init__(self, message: str, status: int = 401):
+        super().__init__(message)
+        self.status = status
+
 
 class UserService:
-    """Singleton service for Driver and Student management with session concurrency control."""
+    """All driver accounts (one instance per process)."""
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._drivers: dict[str, DriverUser] = {}
 
-    _instance = None
-    _lock = threading.RLock()
-
-    def __new__(cls):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super(UserService, cls).__new__(cls)
-                cls._instance._initialized = False
-            return cls._instance
-
-    def __init__(self):
-        if getattr(self, "_initialized", False):
-            return
-
-        self._drivers: Dict[str, DriverUser] = get_default_driver_accounts()
-        self._students: Dict[str, StudentUser] = {
-            "KU-2026-0842": StudentUser(
-                student_id="KU-2026-0842",
-                full_name="Tanvir Ahmed",
-                department="Computer Science & Engineering",
-                preferred_route_id="KU-R01",
-                preferred_stop_name="Malabotha Bazar",
-                alert_lead_minutes=5
-            ),
-            "KU-2026-1102": StudentUser(
-                student_id="KU-2026-1102",
-                full_name="Sumaiya Rahman",
-                department="Business Administration",
-                preferred_route_id="KU-R02",
-                preferred_stop_name="Shibbari Mor",
-                alert_lead_minutes=5
-            )
-        }
-        self._initialized = True
-
-    # -------------------------------------------------------------------------
-    # Driver Operations
-    # -------------------------------------------------------------------------
-    def get_all_drivers(self, include_pin: bool = False) -> List[Dict[str, Any]]:
-        """Returns all registered drivers for the backend admin portal."""
+    def load(self) -> None:
+        """(Re)load all drivers from the database. Called once by create_app()."""
         with self._lock:
-            return [d.to_dict(include_pin=include_pin) for d in self._drivers.values()]
+            self._drivers = {r.driver_id: DriverUser.from_record(r) for r in store.all_rows(DriverRecord)}
 
-    def get_driver_by_id(self, driver_id: str) -> Optional[DriverUser]:
-        """Finds a driver by their unique ID."""
+    # =====================================================================
+    # Reading
+    # =====================================================================
+    def all_drivers(self) -> list[DriverUser]:
+        """Every driver account."""
         with self._lock:
-            return self._drivers.get(driver_id)
+            return list(self._drivers.values())
 
-    def search_drivers(self, query: str) -> List[Dict[str, Any]]:
-        """
-        Searches drivers by name or username for the frontend autocomplete dropdown.
-        Matches as the driver starts typing letters.
-        """
+    def get_driver(self, driver_id: str | None) -> DriverUser | None:
+        """The driver with this ID, or None."""
         with self._lock:
-            q = (query or "").strip().lower()
-            matches = []
-            for d in self._drivers.values():
-                if not q or q in d.full_name.lower() or q in d.username.lower() or q in d.driver_id.lower():
-                    matches.append({
-                        "driver_id": d.driver_id,
-                        "full_name": d.full_name,
-                        "assigned_route_id": d.assigned_route_id
-                    })
-            return matches
+            return self._drivers.get(driver_id or "")
 
-    def authenticate_driver(
-        self,
-        name_or_id: str,
-        route_id: str,
-        pin: str,
-        session_token: str,
-        bus_route_id: Optional[str] = None,
-        lock_timeout_minutes: float = 10
-    ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
-        """
-        Signs a driver in with the details the admin set in the backend:
-          - driver name (exact), username or driver ID
-          - route (must be the route of the driver's bus, when known)
-          - PIN (the driver's own PIN, nothing else)
-        One device at a time: another device is refused while the account is in use,
-        unless that device has been quiet for lock_timeout_minutes.
-        """
+    def find_driver(self, name_or_id: str) -> DriverUser | None:
+        """Exact (case-insensitive) match on driver ID, full name or username. No partial matches."""
+        wanted = (name_or_id or "").strip().lower()
+        if not wanted:
+            return None
         with self._lock:
-            target = (name_or_id or "").strip().lower()
-            matched: Optional[DriverUser] = None
-            for d in self._drivers.values():
-                if target and target in (d.driver_id.lower(), d.full_name.lower(), d.username.lower()):
-                    matched = d
-                    break
+            return next((d for d in self._drivers.values()
+                         if wanted in (d.driver_id.lower(), d.full_name.lower(), d.username.lower())), None)
 
-            if not matched:
-                return False, "Driver not found. Please pick your name from the list.", None
-
-            if not hmac.compare_digest(str(matched.pin), str(pin or "")):
-                return False, "Incorrect PIN.", None
-
-            expected_route = bus_route_id or matched.assigned_route_id
-            if route_id and expected_route and route_id != expected_route:
-                return False, "That isn't your route. Please choose the route of your assigned bus.", None
-
-            now = datetime.now(timezone.utc)
-            if matched.is_logged_in and matched.current_session_token != session_token:
-                last = None
-                try:
-                    last = datetime.fromisoformat(matched.last_active_at) if matched.last_active_at else None
-                except ValueError:
-                    last = None
-                still_in_use = last is None or (now - last) < timedelta(minutes=lock_timeout_minutes)
-                if still_in_use:
-                    return (
-                        False,
-                        f"Account '{matched.full_name}' is already logged in on another device. "
-                        "Log out there first, or ask the admin to unlock it.",
-                        None
-                    )
-
-            matched.is_logged_in = True
-            matched.current_session_token = session_token
-            matched.last_login_at = now.isoformat()
-            matched.last_active_at = now.isoformat()
-            if expected_route:
-                matched.assigned_route_id = expected_route
-
-            return True, "Login successful.", matched.to_dict()
-
-    # -------------------------------------------------------------------------
-    # Daily duty (bus + route) notifications
-    # -------------------------------------------------------------------------
-    def mark_assignment_changed(self, driver_id: str) -> None:
-        """Called when the admin changes a driver's bus, or the route of that bus."""
+    def search_drivers(self, query: str) -> list[dict]:
+        """Name suggestions for the driver login page: drivers whose name/username/ID contains `query`."""
+        q = (query or "").strip().lower()
         with self._lock:
-            d = self._drivers.get(driver_id)
-            if d:
-                d.assignment_updated_at = datetime.now(timezone.utc).isoformat()
+            return [{"driver_id": d.driver_id, "full_name": d.full_name, "assigned_bus_id": d.assigned_bus_id}
+                    for d in self._drivers.values()
+                    if not q or q in d.full_name.lower() or q in d.username.lower() or q in d.driver_id.lower()]
 
-    def mark_assignment_seen(self, driver_id: str) -> None:
+    def drivers_of_bus(self, bus_id: str) -> list[DriverUser]:
+        """Drivers whose assigned bus is `bus_id`."""
         with self._lock:
-            d = self._drivers.get(driver_id)
-            if d:
-                d.assignment_seen_at = datetime.now(timezone.utc).isoformat()
+            return [d for d in self._drivers.values() if d.assigned_bus_id == bus_id]
 
-    def touch_driver(self, driver_id: str, session_token: Optional[str]) -> bool:
-        """Records activity from the driver's device. False if this device no longer holds the account."""
+    def name_taken(self, full_name: str, except_driver_id: str | None = None) -> bool:
+        """True if another driver already uses this name (names must be unique to sign in by name)."""
+        wanted = full_name.strip().lower()
         with self._lock:
-            d = self._drivers.get(driver_id)
-            if not d or not d.is_logged_in or d.current_session_token != session_token:
-                return False
-            d.last_active_at = datetime.now(timezone.utc).isoformat()
-            return True
+            return any(d.full_name.lower() == wanted and d.driver_id != except_driver_id
+                       for d in self._drivers.values())
 
-    def logout_driver(self, driver_id: str, session_token: Optional[str] = None) -> bool:
-        """Frees the driver session lock upon logout (only for the device that holds it)."""
+    # =====================================================================
+    # Admin setup
+    # =====================================================================
+    def create_driver(self, full_name: str, pin: str, bus_id: str, phone: str = "") -> DriverUser:
+        """Add a driver (the form is already checked by the admin controller)."""
+        with self._lock:
+            n = 1
+            while f"DRV-{n:02d}" in self._drivers:          # never reuse an ID that is in use
+                n += 1
+            driver_id = f"DRV-{n:02d}"
+            driver = DriverUser(driver_id=driver_id, username=driver_id.lower().replace("-", ""),
+                                full_name=full_name, pin_hash="", phone=phone, assigned_bus_id=bus_id,
+                                assignment_updated_at=store.utc_now_iso())
+            driver.set_pin(pin)
+            self._drivers[driver_id] = driver
+            store.save(driver.to_record())
+            return driver
+
+    def update_driver(self, driver_id: str, full_name: str | None = None, phone: str | None = None,
+                      pin: str | None = None, bus_id: str | None = None) -> DriverUser | None:
+        """Change a driver's details. Only the given fields change. A new bus counts as a duty change."""
         with self._lock:
             driver = self._drivers.get(driver_id)
-            if driver and (session_token is None or driver.current_session_token in (None, session_token)):
-                driver.is_logged_in = False
-                driver.current_session_token = None
-                return True
-            return False
+            if driver is None:
+                return None
+            if full_name:
+                driver.full_name = full_name
+            if phone is not None:
+                driver.phone = phone
+            if pin:
+                driver.set_pin(pin)
+            if bus_id and bus_id != driver.assigned_bus_id:
+                driver.assigned_bus_id = bus_id
+                driver.assignment_updated_at = store.utc_now_iso()
+            store.save(driver.to_record())
+            return driver
 
-    def unlock_driver_session(self, driver_id: str) -> bool:
-        """Admin override to force-unlock a locked driver account."""
+    def delete_driver(self, driver_id: str) -> bool:
+        """Remove a driver account. False if it doesn't exist."""
+        with self._lock:
+            if self._drivers.pop(driver_id, None) is None:
+                return False
+            store.delete(DriverRecord, driver_id)
+            return True
+
+    def mark_duty_changed(self, driver_id: str) -> None:
+        """The route of this driver's bus changed: show "Changed today" on their duty card."""
         with self._lock:
             driver = self._drivers.get(driver_id)
             if driver:
-                driver.is_logged_in = False
-                driver.current_session_token = None
-                return True
-            return False
+                driver.assignment_updated_at = store.utc_now_iso()
+                store.save(driver.to_record())
 
-    def update_driver(self, driver_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Updates driver details from the backend admin portal."""
+    def mark_duty_seen(self, driver_id: str) -> None:
+        """The driver opened their duty card: the change notice is read."""
         with self._lock:
             driver = self._drivers.get(driver_id)
-            if not driver:
-                return None
+            if driver:
+                driver.assignment_seen_at = store.utc_now_iso()
+                store.save(driver.to_record())
 
-            if "full_name" in data and data["full_name"]:
-                driver.full_name = data["full_name"].strip()
-            if "phone" in data and data["phone"] is not None:
-                driver.phone = str(data["phone"]).strip()
-            if "assigned_route_id" in data and data["assigned_route_id"]:
-                driver.assigned_route_id = data["assigned_route_id"]
-            if "assigned_bus_id" in data and data["assigned_bus_id"]:
-                driver.assigned_bus_id = data["assigned_bus_id"]
-            if "pin" in data and data["pin"]:
-                driver.pin = str(data["pin"]).strip()
-            if "is_logged_in" in data:
-                driver.is_logged_in = bool(data["is_logged_in"])
-                if not driver.is_logged_in:
-                    driver.current_session_token = None
+    # =====================================================================
+    # Front-end sign-in (one phone at a time)
+    # =====================================================================
+    def sign_in(self, name_or_id: str, route_id: str, pin: str, session_token: str,
+                bus_route_id: str | None, lock_minutes: float) -> DriverUser:
+        """
+        Sign a driver in with exactly what the admin set up:
+          * their name (or username / driver ID) - exact match only
+          * their PIN
+          * the route of their bus (when they chose one)
 
-            return driver.to_dict(include_pin=True)
-
-    def create_driver(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Creates a new driver record from backend admin."""
+        The account is locked to this phone (`session_token`). Another phone is refused
+        while the account is in use, unless the first phone has been quiet for `lock_minutes`.
+        Raises LoginError with a message for the driver.
+        """
         with self._lock:
-            n = 1
-            while f"DRV-{n:02d}" in self._drivers:   # never reuse/overwrite an existing ID
-                n += 1
-            new_id = f"DRV-{n:02d}"
-            username = str(data.get("username") or new_id.lower().replace("-", "")).strip()
-            driver = DriverUser(
-                driver_id=new_id,
-                username=username,
-                pin=str(data.get("pin") or "").strip(),
-                full_name=str(data.get("full_name") or f"Driver {new_id}").strip(),
-                phone=str(data.get("phone") or "").strip(),
-                assigned_route_id=data.get("assigned_route_id", "KU-R01"),
-                assigned_bus_id=data.get("assigned_bus_id", "KU-BUS-01"),
-                is_logged_in=False
-            )
-            self._drivers[driver.driver_id] = driver
-            return driver.to_dict(include_pin=True)
+            driver = self.find_driver(name_or_id)
+            if driver is None:
+                raise LoginError("Driver not found. Please pick your name from the list.")
+            if not driver.check_pin(pin):
+                raise LoginError("Incorrect PIN.")
+            if route_id and bus_route_id and route_id != bus_route_id:
+                raise LoginError("That isn't your route. Please choose the route of your assigned bus.")
 
-    def delete_driver(self, driver_id: str) -> bool:
-        """Deletes a driver record from backend admin."""
+            now = datetime.now(UTC)
+            if driver.is_logged_in and driver.session_token != session_token:
+                last_seen = driver.last_active_at or _parse_iso(driver.last_login_at)
+                if last_seen and now - last_seen < timedelta(minutes=lock_minutes):
+                    raise LoginError(f"Account '{driver.full_name}' is already logged in on another device. "
+                                     "Log out there first, or ask the admin to unlock it.", status=409)
+
+            driver.session_token = session_token
+            driver.last_login_at = now.isoformat()
+            driver.last_active_at = now
+            store.save(driver.to_record())
+            return driver
+
+    def touch(self, driver_id: str, session_token: str | None) -> bool:
+        """
+        Note activity from the driver's phone (keeps the lock alive).
+        False if this phone no longer holds the account (logged out, unlocked, or taken over).
+        """
         with self._lock:
-            if driver_id in self._drivers:
-                del self._drivers[driver_id]
-                return True
-            return False
+            driver = self._drivers.get(driver_id)
+            if driver is None or not session_token or driver.session_token != session_token:
+                return False
+            driver.last_active_at = datetime.now(UTC)
+            return True
 
-    # -------------------------------------------------------------------------
-    # Student Operations (for Student Setup Sidebar)
-    # -------------------------------------------------------------------------
-    def get_all_students(self) -> List[Dict[str, Any]]:
-        """Returns all registered students for student setup."""
+    def sign_out(self, driver_id: str, session_token: str | None) -> None:
+        """Free the account, but only if this phone is the one holding it."""
         with self._lock:
-            return [s.to_dict() for s in self._students.values()]
+            driver = self._drivers.get(driver_id)
+            if driver and driver.session_token == session_token:
+                self._release(driver)
 
-    def update_student(self, student_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Updates student details from the backend admin portal."""
+    def unlock(self, driver_id: str) -> bool:
+        """Admin override: free a locked account so the driver can sign in on another phone."""
         with self._lock:
-            student = self._students.get(student_id)
-            if not student:
-                # If creating or saving guest as registered
-                student = StudentUser(
-                    student_id=student_id,
-                    full_name=data.get("full_name", "KU Student"),
-                    department=data.get("department", "CSE"),
-                    preferred_route_id=data.get("preferred_route_id", "KU-R01"),
-                    preferred_stop_name=data.get("preferred_stop_name", "Malabotha Bazar"),
-                    alert_lead_minutes=int(data.get("alert_lead_minutes", 5))
-                )
-                self._students[student_id] = student
-                return student.to_dict()
+            driver = self._drivers.get(driver_id)
+            if driver is None:
+                return False
+            self._release(driver)
+            return True
 
-            if "full_name" in data:
-                student.full_name = data["full_name"]
-            if "department" in data:
-                student.department = data["department"]
-            if "preferred_route_id" in data:
-                student.preferred_route_id = data["preferred_route_id"]
-            if "preferred_stop_name" in data:
-                student.preferred_stop_name = data["preferred_stop_name"]
-            if "alert_lead_minutes" in data:
-                student.alert_lead_minutes = int(data["alert_lead_minutes"])
+    @staticmethod
+    def _release(driver: DriverUser) -> None:
+        driver.session_token = None
+        driver.last_active_at = None
+        store.save(driver.to_record())
 
-            return student.to_dict()
+
+def new_session_token() -> str:
+    """Random token that identifies one browser session (one phone) for the driver lock."""
+    return secrets.token_hex(16)
+
+
+def _parse_iso(text: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(text) if text else None
+    except ValueError:
+        return None

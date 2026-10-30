@@ -2,138 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}BusPlus - Khulna University Smart Bus Tracker{% endblock %}</title>
-    
-    <!-- Google Fonts: Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Base & Common Styles -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0866ff">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}BusPlus · Khulna University{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
-    
-    <!-- Page Specific Styles -->
     {% block extra_css %}{% endblock %}
 
-    <!-- Google Maps JS SDK -->
-    {% if google_maps_api_key %}
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry" async defer></script>
-    {% endif %}
-
-    <!-- Google Maps Tile Engine & Leaflet Core -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <script>
-        // Global App Configuration injected into frontend
-        window.APP_CONFIG = {
-            googleMapsApiKey: "{{ google_maps_api_key or '' }}",
-            universityName: "Khulna University",
-            universityLocation: {{ university_location | tojson if university_location is defined else '{"latitude": 22.8010, "longitude": 89.5345}' | safe }}
-        };
-    </script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
 </head>
 <body>
     <div class="app-container">
-        <!-- Main Navigation Bar (hidden on mobile splash/login/dashboard screens) -->
-        {% if request.path not in ['/', '/driver/login', '/driver/dashboard', '/student/login', '/student/dashboard', '/teacher/login', '/teacher/dashboard'] %}
-        <header class="main-navbar">
-            <div class="navbar-inner">
-                <a href="/" class="brand-wrapper">
-                    <div class="brand-logo-icon">🚌</div>
-                    <div class="brand-text">
-                        <h1>BusPlus <span class="uni-badge">KU</span></h1>
-                        <p>Khulna University Transit Tracker</p>
-                    </div>
-                </a>
-
-                <nav class="nav-actions">
-                    <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">Home</a>
-                    <a href="/student/dashboard" class="nav-link {% if '/student' in request.path %}active{% endif %}">Student Tracker</a>
-                    <a href="/driver/dashboard" class="nav-link {% if '/driver' in request.path %}active{% endif %}">Driver Console</a>
-                    
-                    <!-- Google Maps API Key Config Button -->
-                    <button id="btn-open-map-modal" class="btn btn-secondary btn-sm" title="Google Maps API Settings">
-                        <span>🗺️</span> Maps Key
-                    </button>
-
-                    {% if session.get('role') %}
-                    <a href="/api/auth/logout" class="btn btn-secondary btn-sm">Log Out</a>
-                    {% endif %}
-                </nav>
-            </div>
-        </header>
-        {% endif %}
-
-        <!-- Main Content Block -->
-        <main style="flex: 1;">
+        <main class="app-main">
             {% block content %}{% endblock %}
         </main>
-
-        <!-- Global Toast Alert Container -->
-        <div id="toast-container"></div>
-
-        <!-- Google Maps API Key Config Modal -->
-        <div id="map-key-modal" class="modal-overlay">
-            <div class="modal-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                    <h3 style="font-size:1.15rem; font-weight:700;">Google Maps API Configuration</h3>
-                    <button id="btn-close-map-modal" style="background:none; border:none; font-size:1.25rem; cursor:pointer;">✕</button>
-                </div>
-                <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem; line-height:1.5;">
-                    Enter your Google Maps JavaScript API key to render native Google Maps. If left blank, BusPlus automatically provides an interactive OpenStreetMap vector fallback for zero downtime.
-                </p>
-                <div style="margin-bottom:1.25rem;">
-                    <label style="display:block; font-size:0.8rem; font-weight:600; margin-bottom:0.35rem;">Google Maps API Key</label>
-                    <input type="text" id="input-modal-maps-key" class="custom-input" placeholder="AIzaSy..." value="{{ google_maps_api_key or '' }}">
-                </div>
-                <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
-                    <button id="btn-cancel-modal" class="btn btn-secondary btn-sm">Cancel</button>
-                    <button id="btn-save-maps-key" class="btn btn-primary btn-sm">Save & Apply</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Shared Footer (hidden on mobile splash/login/dashboard screens) -->
-        {% if request.path not in ['/', '/driver/login', '/driver/dashboard', '/student/login', '/student/dashboard', '/teacher/login', '/teacher/dashboard'] %}
-        <footer class="main-footer">
-            <p>© 2026 Khulna University · BusPlus Smart Transit System · Designed with modern aesthetic for KU students and drivers.</p>
-        </footer>
-        {% endif %}
     </div>
-
-    <!-- Common JavaScript Helper -->
-    <script src="{{ url_for('static', filename='js/google_maps_helper.js') }}"></script>
-    <script>
-        // Modal Handling for Google Maps API Key
-        const mapModal = document.getElementById("map-key-modal");
-        const btnOpenModal = document.getElementById("btn-open-map-modal");
-        const btnCloseModal = document.getElementById("btn-close-map-modal");
-        const btnCancelModal = document.getElementById("btn-cancel-modal");
-        const btnSaveKey = document.getElementById("btn-save-maps-key");
-        const inputKey = document.getElementById("input-modal-maps-key");
-
-        if (btnOpenModal) btnOpenModal.addEventListener("click", () => mapModal.classList.add("active"));
-        if (btnCloseModal) btnCloseModal.addEventListener("click", () => mapModal.classList.remove("active"));
-        if (btnCancelModal) btnCancelModal.addEventListener("click", () => mapModal.classList.remove("active"));
-
-        if (btnSaveKey) {
-            btnSaveKey.addEventListener("click", async () => {
-                const newKey = inputKey.value.trim();
-                const resp = await fetch("/api/config/maps-key", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ api_key: newKey })
-                });
-                const res = await resp.json();
-                if (res.success) {
-                    mapModal.classList.remove("active");
-                    location.reload();
-                }
-            });
-        }
-    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -1,93 +1,94 @@
 """
-Khulna University Bus Tracker (BusPlus)
-Driver and Student User Models & Demo Credentials
+Driver accounts.
+
+The admin creates drivers in the backend. A driver signs in on the front end
+with their name, their bus's route and their PIN. The PIN itself is never
+stored: only a salted hash made by Werkzeug (`generate_password_hash`).
+
+One phone at a time: while a driver is signed in, `session_token` holds the
+token of that phone's browser session, and other phones are refused until the
+driver logs out, the admin unlocks the account, or the phone goes quiet for
+`Config.DRIVER_SESSION_TIMEOUT_MINUTES`.
 """
 
-from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional
+from dataclasses import dataclass
+from datetime import datetime
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from models.records import DriverRecord
+
 
 @dataclass
 class DriverUser:
-    """Driver account credentials, route assignment, and active session status."""
-    driver_id: str
-    username: str
-    pin: str
-    full_name: str
-    phone: str
-    assigned_route_id: str = "KU-R01"
-    assigned_bus_id: str = "KU-BUS-01"
-    is_logged_in: bool = False
-    current_session_token: Optional[str] = None
-    last_login_at: Optional[str] = None
-    last_active_at: Optional[str] = None  # last login or GPS update (used to expire a stale lock)
-    # Daily duty: when the admin last changed this driver's bus/route, and when the driver last read it
-    assignment_updated_at: Optional[str] = None
-    assignment_seen_at: Optional[str] = None
+    """A driver account as used while the app runs (see the module notes above)."""
+    driver_id: str                         # e.g. "DRV-01"
+    username: str                          # short login name, e.g. "rafiqul"
+    full_name: str                         # drivers pick this name on the login page
+    pin_hash: str
+    phone: str = ""
+    assigned_bus_id: str | None = None     # the bus the admin gave this driver
+    assignment_updated_at: str | None = None   # when the admin last changed the bus/route (ISO, UTC)
+    assignment_seen_at: str | None = None      # when the driver last opened that notice (ISO, UTC)
 
-    def to_dict(self, include_pin: bool = False) -> Dict[str, Any]:
-        data = asdict(self)
-        if not include_pin:
-            data.pop("pin", None)
-            data.pop("current_session_token", None)
-        return data
+    # ---- one-phone lock ----
+    session_token: str | None = None       # token of the phone that is signed in (None = free)
+    last_login_at: str | None = None
+    last_active_at: datetime | None = None  # last request from that phone (memory only)
 
-@dataclass
-class StudentUser:
-    """Student profile, default boarding stop, and proximity alert settings."""
-    student_id: str
-    full_name: str
-    department: str
-    preferred_route_id: str = "KU-R01"
-    preferred_stop_name: str = "Malabotha Bazar"
-    alert_lead_minutes: int = 5
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    @property
+    def is_logged_in(self) -> bool:
+        """True while a phone holds this account."""
+        return self.session_token is not None
 
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+    def set_pin(self, pin: str) -> None:
+        """Store a new PIN as a salted hash."""
+        self.pin_hash = generate_password_hash(pin)
 
+    def check_pin(self, pin: str) -> bool:
+        """True if `pin` is this driver's PIN (constant-time comparison inside Werkzeug)."""
+        return bool(pin) and check_password_hash(self.pin_hash, pin)
 
-def get_default_driver_accounts() -> Dict[str, DriverUser]:
-    """Default driver accounts for Khulna University."""
-    return {
-        "DRV-01": DriverUser(
-            driver_id="DRV-01",
-            username="rafiqul",
-            pin="1234",
-            full_name="Md. Rafiqul Islam",
-            phone="+880 1712-890123",
-            assigned_route_id="KU-R01",
-            assigned_bus_id="KU-BUS-01",
-            is_logged_in=False
-        ),
-        "DRV-02": DriverUser(
-            driver_id="DRV-02",
-            username="mannan",
-            pin="1234",
-            full_name="Abdul Mannan",
-            phone="+880 1715-456789",
-            assigned_route_id="KU-R02",
-            assigned_bus_id="KU-BUS-02",
-            is_logged_in=False
-        ),
-        "DRV-03": DriverUser(
-            driver_id="DRV-03",
-            username="kamal",
-            pin="1234",
-            full_name="Kamal Hossain",
-            phone="+880 1819-123987",
-            assigned_route_id="KU-R03",
-            assigned_bus_id="KU-BUS-03",
-            is_logged_in=False
-        ),
-        "DRV-04": DriverUser(
-            driver_id="DRV-04",
-            username="siraj",
-            pin="1234",
-            full_name="Siraj Uddin",
-            phone="+880 1913-654321",
-            assigned_route_id="KU-R01",
-            assigned_bus_id="KU-BUS-04",
-            is_logged_in=False
+    def to_dict(self) -> dict:
+        """JSON form for the admin panel and the driver's own page (never includes the PIN)."""
+        return {
+            "driver_id": self.driver_id,
+            "username": self.username,
+            "full_name": self.full_name,
+            "phone": self.phone,
+            "assigned_bus_id": self.assigned_bus_id,
+            "is_logged_in": self.is_logged_in,
+            "last_login_at": self.last_login_at,
+        }
+
+    # ---------------------------------------------------------------- database
+    @classmethod
+    def from_record(cls, record: DriverRecord) -> "DriverUser":
+        """Build the in-memory driver from their database row."""
+        return cls(
+            driver_id=record.driver_id,
+            username=record.username,
+            full_name=record.full_name,
+            pin_hash=record.pin_hash,
+            phone=record.phone or "",
+            assigned_bus_id=record.bus_id,
+            assignment_updated_at=record.assignment_updated_at,
+            assignment_seen_at=record.assignment_seen_at,
+            session_token=record.session_token,
+            last_login_at=record.last_login_at,
         )
-    }
+
+    def to_record(self) -> DriverRecord:
+        """Database row for this driver (saved with `db.session.merge`)."""
+        return DriverRecord(
+            driver_id=self.driver_id,
+            username=self.username,
+            full_name=self.full_name,
+            phone=self.phone,
+            pin_hash=self.pin_hash,
+            bus_id=self.assigned_bus_id,
+            assignment_updated_at=self.assignment_updated_at,
+            assignment_seen_at=self.assignment_seen_at,
+            session_token=self.session_token,
+            last_login_at=self.last_login_at,
+        )

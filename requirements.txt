@@ -1,4 +1,27 @@
+# BusPlus runtime libraries (Python 3.11 or newer). Install: pip install -r requirements.txt
+
+# Web framework
 Flask==3.1.3
-Flask-Cors==6.0.5
-Werkzeug>=3.1.0
-Jinja2>=3.1.2
+Werkzeug==3.1.9
+
+# Database (SQLite through SQLAlchemy)
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.1.6
+
+# Security: CSRF tokens, login rate limits, security headers / HTTPS
+Flask-WTF==1.3.0
+Flask-Limiter==4.1.1
+flask-talisman==1.1.0
+
+# Settings from the .env file
+python-dotenv==1.2.3
+
+# Calls to the road router (route editor)
+requests==2.34.2
+
+# Time zone data (Asia/Dhaka) - needed on Windows, harmless elsewhere
+tzdata==2026.6
+
+# Production server: gunicorn with gevent, so one process can hold many live map connections
+gunicorn==26.2.0 ; sys_platform != "win32"
+gevent==26.9.0 ; sys_platform != "win32"

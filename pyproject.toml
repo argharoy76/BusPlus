@@ -1,0 +1,14 @@
+# Tool settings for BusPlus (the app itself is installed from requirements.txt).
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["instance"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, bugbear, modern Python, simplifications
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

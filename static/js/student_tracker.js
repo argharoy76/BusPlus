@@ -1,21 +1,33 @@
-/**
- * Khulna University Bus Tracker (BusPlus)
- * Student Live Tracking, Stop ETA & Proximity Alert Controller
+/*
+ * BusPlus rider map (students and teachers; APP_DATA.audience says which).
  *
- * Features:
- * - BusPlus Side Menu Drawer (Home position selection, alert lead time, repeat frequency)
- * - Front Drop-Down Quick Selector Bar (Bus & Main Stop selection)
- * - Real-time animated Google Maps engine integration
- * - Customizable multi-tone audio alerts and push notifications
+ * - Full-screen map with every live bus of this rider's audience.
+ * - Bottom sheet (phones) / side panel (computers): pick a route, see its buses, tap a bus for details.
+ * - Menu: Home stop (type-ahead from all route stops) and arrival-alert settings.
+ * - Arrival alerts: chime + pop-up + browser notification when a bus nears the Home stop.
+ *
+ * Needs google_maps_helper.js (window.googleMapsHelper and escapeHtml) loaded first.
+ * Settings are kept in this browser's localStorage.
  */
 
 /** Bus icon used in the list (front view of a bus, drawn with the current text colour). */
 const BUS_ICON_SVG = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><circle cx="8.5" cy="14" r="1" class="ico-fill"/><circle cx="15.5" cy="14" r="1" class="ico-fill"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>';
 
+/** Screens this wide show the sheet as a fixed side panel (must match the @media rule in student.css). */
+const isWideScreen = () => window.matchMedia("(min-width: 900px)").matches;
+
+/** localStorage that never throws (private mode / blocked storage just means nothing is remembered). */
+const settings = {
+    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* not saved */ } },
+    remove(key) { try { localStorage.removeItem(key); } catch (e) { /* not saved */ } }
+};
+
 /**
  * Google-Maps-style bottom sheet with three resting heights:
  *   peek (just the header), half (about half the screen) and full.
  * Drag the handle/header, flick it, tap the handle, or scroll the list to move it.
+ * On wide screens it stays put as a side panel and all of this is switched off.
  */
 class BottomSheet {
     constructor({ sheet, dragArea, grabber, content, app }) {
@@ -27,6 +39,7 @@ class BottomSheet {
         this.snap = "peek";
         this.visiblePx = 150;
         this.drag = null;
+        this.forceFull = false;
         this.suppressClick = false;
         this.lastWheel = 0;
 
@@ -38,11 +51,11 @@ class BottomSheet {
         this.bindWheel();
 
         this.grabber?.addEventListener("click", () => {
-            if (this.suppressClick || BottomSheet.isSidePanel()) return;
+            if (this.suppressClick || isWideScreen()) return;
             this.snapTo(this.snap === "peek" ? "half" : this.snap === "half" ? "full" : "peek");
         });
 
-        // Swallow the click that follows a drag so it doesn't press a tab/button by accident
+        // Swallow the click that follows a drag so it doesn't press a button by accident
         this.dragArea?.addEventListener("click", (e) => {
             if (this.suppressClick) {
                 e.stopPropagation();
@@ -57,11 +70,7 @@ class BottomSheet {
         });
     }
 
-    /** On wide screens (computers) the sheet is a fixed panel at the side instead of a bottom sheet. */
-    static isSidePanel() {
-        return window.matchMedia("(min-width: 900px)").matches;
-    }
-
+    /** Works out the three resting heights (px of sheet visible) for the current screen and content. */
     measure() {
         const H = this.sheet.offsetHeight || window.innerHeight * 0.9;
         const peek = Math.min(H, (this.dragArea?.offsetHeight || 140) + 6);
@@ -79,13 +88,14 @@ class BottomSheet {
         this.snaps = { peek, half, full };
     }
 
-    /** Lets the sheet open to the full screen height (e.g. while the route drop-down is open). */
+    /** Lets the sheet open to the full screen height (while the route drop-down is open). */
     setForceFull(on) {
         this.forceFull = on;
         if (on) this.snapTo("full");
         else this.refresh();
     }
 
+    /** Moves the sheet so px of it is visible; also tells the page (Locate Me button rides on top). */
     setVisible(px, animate = true) {
         const v = Math.max(this.snaps.peek, Math.min(this.snaps.full, px));
         this.visiblePx = v;
@@ -146,7 +156,7 @@ class BottomSheet {
     endDrag() {
         const d = this.drag;
         this.drag = null;
-        if (!d) return false;
+        if (!d) return;
         if (d.moved) {
             this.suppressClick = true;
             setTimeout(() => { this.suppressClick = false; }, 50);
@@ -154,9 +164,9 @@ class BottomSheet {
         } else {
             this.setVisible(this.visiblePx, true);
         }
-        return d.moved;
     }
 
+    /** Mouse / pen / touch drag on the handle and header. */
     bindPointerDrag() {
         const area = this.dragArea;
         if (!area) return;
@@ -174,7 +184,7 @@ class BottomSheet {
             this.endDrag();
         };
         area.addEventListener("pointerdown", (e) => {
-            if (BottomSheet.isSidePanel()) return;        // computer layout: fixed side panel
+            if (isWideScreen()) return;
             if (e.pointerType === "mouse" && e.button !== 0) return;
             // Typing / picking in the route search must not drag the sheet
             if (e.target.closest("input, textarea, select, .route-search-dropdown, .route-search-clear")) return;
@@ -189,7 +199,7 @@ class BottomSheet {
 
     /**
      * Touch on the list: pulling down at the top of the list lowers the sheet,
-     * and pushing up while the sheet isn't full raises it — like Google Maps.
+     * and pushing up while the sheet isn't full raises it, like Google Maps.
      */
     bindContentTouch() {
         const c = this.content;
@@ -197,7 +207,7 @@ class BottomSheet {
         let startY = 0;
         let mode = null; // null | "sheet" | "scroll"
         c.addEventListener("touchstart", (e) => {
-            if (BottomSheet.isSidePanel()) { mode = "scroll"; return; }
+            if (isWideScreen()) { mode = "scroll"; return; }
             startY = e.touches[0].clientY;
             mode = null;
         }, { passive: true });
@@ -226,7 +236,7 @@ class BottomSheet {
     /** Mouse wheel / trackpad: scroll down on the sheet to raise it, scroll up at the top to lower it. */
     bindWheel() {
         this.sheet.addEventListener("wheel", (e) => {
-            if (BottomSheet.isSidePanel()) return;        // let the list scroll normally
+            if (isWideScreen()) return;        // side panel: the list just scrolls
             const now = Date.now();
             const atTop = !this.content || this.content.scrollTop <= 0;
             const order = ["peek", "half", "full"];
@@ -243,54 +253,39 @@ class BottomSheet {
     }
 }
 
+/** The rider map page: live buses, route/bus selection, Home stop and arrival alerts. */
 class StudentTracker {
     constructor() {
-        this.audience = window.APP_DATA?.audience === "teacher" ? "teacher" : "student";
-        this.allRoutes = window.APP_DATA?.routes || [];
-        this.buses = window.APP_DATA?.buses || [];
+        const data = window.APP_DATA || {};
+        this.audience = data.audience === "teacher" ? "teacher" : "student";
+        this.allRoutes = data.routes || [];
+        this.latestBuses = data.buses || [];
 
-        // Restore or default route and stop
-        this.selectedRouteId = window.APP_DATA?.preferred_route_id || "KU-R01";
-        this.selectedStopName = window.APP_DATA?.preferred_stop || "Malabotha More";
+        // Home stop (default Malabotha More) and an optional typed address shown as its name
+        this.homePosition = settings.get("busplus_home_stop") || "Malabotha More";
+        this.homeLat = parseFloat(settings.get("busplus_home_lat")) || 22.7725;
+        this.homeLng = parseFloat(settings.get("busplus_home_lng")) || 89.5855;
+        this.homeAddress = settings.get("busplus_home_address") || "";
 
-        // Restore or default Home Position
-        this.homePosition = localStorage.getItem("busplus_home_stop") || "Malabotha More";
-        this.homeLat = parseFloat(localStorage.getItem("busplus_home_lat")) || 22.7725;
-        this.homeLng = parseFloat(localStorage.getItem("busplus_home_lng")) || 89.5855;
-        this.homeAddress = localStorage.getItem("busplus_home_address") || "";
-
-        // Restore or default Notification Settings
-        const savedLeadMin = parseInt(localStorage.getItem("busplus_alert_lead_minutes"), 10);
-        this.alertThresholdMinutes = !isNaN(savedLeadMin) ? savedLeadMin : parseInt(window.APP_DATA?.alert_lead_minutes || 5, 10);
-
-        this.alertFrequency = localStorage.getItem("busplus_alert_frequency") || "1";
+        // Arrival alert: how many minutes before, and how many times to repeat
+        const savedLeadMin = parseInt(settings.get("busplus_alert_lead_minutes"), 10);
+        this.alertThresholdMinutes = !isNaN(savedLeadMin) ? savedLeadMin : parseInt(data.alert_lead_minutes || 5, 10);
+        this.alertFrequency = settings.get("busplus_alert_frequency") || "1";
         this.alertTriggerCount = 0;
         this.lastAlertTimestamp = 0;
-
-        this.isAudioAlertEnabled = true;
-        this.studentLocation = null;
-        this.pollInterval = null;
-
-        // Web Audio Synthesizer Context
+        this.lastAlertBusId = null;
         this.audioCtx = null;
 
-        // UI references
-        this.routeSelect = document.getElementById("select-route");
-        this.stopSelect = document.getElementById("select-stop");
-        this.frontBusSelect = document.getElementById("front-select-bus");
-        this.frontStopSelect = document.getElementById("front-select-stop");
-
-        this.sideHomeSelect = document.getElementById("side-home-select");
+        // Menu
         this.sideHomeLabel = document.getElementById("side-current-home-label");
-        this.sideFreqSelect = document.getElementById("side-frequency-select");
-        this.sideSoundCheckbox = document.getElementById("side-sound-checkbox");
-        this.customMinutesInput = document.getElementById("side-custom-minutes-input");
         this.sideNotifLabel = document.getElementById("side-current-notif-label");
+        this.sideFreqSelect = document.getElementById("side-frequency-select");
+        this.customMinutesInput = document.getElementById("side-custom-minutes-input");
+        this.minutesHint = document.getElementById("side-minutes-hint");
         this.homeAddressInput = document.getElementById("side-home-address-input");
         this.homeSuggestionsBox = document.getElementById("side-home-suggestions");
-        this.minutesHint = document.getElementById("side-minutes-hint");
 
-        // Places offered as Home address suggestions (every stop on every KU route)
+        // Home address suggestions: every stop on every route
         this.homePlaces = this.buildHomePlaces();
         this.homeSuggestions = [];
         this.activeSuggestionIdx = -1;
@@ -300,15 +295,15 @@ class StudentTracker {
         // Bottom sheet selection: nothing selected = all routes & buses on the map
         this.routeFilter = null;   // route_id or null
         this.busFilter = null;     // bus_id or null
-        this.latestBuses = this.buses;
-        this.latestAlert = null;
         this.sheet = null;
         this.lastSheetSignature = "";
+        this.lastShownRoutes = null;
+        this.streamLive = false;
+        this.lastArrivalCheck = 0;
 
         this.sheetEl = document.getElementById("bus-sheet");
         this.sheetContent = document.getElementById("bus-sheet-content");
         this.sheetTitle = document.getElementById("bus-sheet-title");
-        this.sheetSubtitle = document.getElementById("bus-sheet-subtitle");
         this.sheetCount = document.getElementById("bus-sheet-count");
         this.sheetBack = document.getElementById("bus-sheet-back");
         this.routeSearchWrap = document.getElementById("route-search");
@@ -323,148 +318,59 @@ class StudentTracker {
         this.homeStripEta = document.getElementById("bus-sheet-home-eta");
 
         this.btnLocateMe = document.getElementById("btn-locate-me");
-        this.soundToggle = document.getElementById("toggle-audio-alerts");
-        this.btnTestSound = document.getElementById("btn-test-sound");
-        this.alertBannerCard = document.getElementById("proximity-alert-banner");
-        this.etaNumber = document.getElementById("eta-minutes-val");
-        this.etaDistance = document.getElementById("eta-dist-val");
-        this.etaClock = document.getElementById("eta-clock-val");
-        this.etaSpeed = document.getElementById("eta-speed-val");
-        this.alertStatusPill = document.getElementById("alert-status-pill");
-        this.targetStopLabel = document.getElementById("target-stop-label");
-        this.busNameLabel = document.getElementById("target-bus-label");
+        this.btnLocateLabel = this.btnLocateMe?.querySelector("span");
     }
 
     async init() {
-        // 1. Initialize Google Map
-        await window.googleMapsHelper.initMap("student-map", {
-            center: { lat: 22.8010, lng: 89.5345 },
-            zoom: 13
-        });
+        const helper = window.googleMapsHelper;
+        helper.initMap("student-map", { zoom: 13 });
 
-        // 2. Initialize Front Drop-Downs & Side Menu Home/Stops
-        this.populateStopsDropdown(this.selectedRouteId);
-        this.populateFrontStopsDropdown(this.selectedRouteId);
-        this.populateSideHomeDropdown();
-        this.renderTimelineStops(this.selectedRouteId);
-
-        // 3. Sync UI with saved preferences
         this.syncPreferencesUi();
+        helper.updateHomeLocationMarker(this.homeLat, this.homeLng);
 
-        // 4. Render saved Home Position marker on map
-        if (this.homeLat && this.homeLng) {
-            window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng, this.getHomeDisplayName());
-        }
-
-        // 4b. Route lines + bottom sheet (start with every route and live bus showing)
+        // Route lines + bottom sheet (start with every route and live bus showing)
         await this.loadRoutesFromBackend();
-        window.googleMapsHelper.onBusMarkerClick = (busId) => this.selectBus(busId);
-        window.googleMapsHelper.drawRoutes(this.allRoutes);
+        helper.onBusMarkerClick = (busId) => this.selectBus(busId);
+        helper.drawRoutes(this.allRoutes);
         this.setupBottomSheet();
         this.renderSheet(true);
         this.applyMapFilter({ fit: true });
 
-        // 5. Attach event listeners
-        if (this.routeSelect) {
-            this.routeSelect.value = this.selectedRouteId;
-            this.routeSelect.addEventListener("change", (e) => this.handleRouteChange(e.target.value));
-        }
-
-        if (this.stopSelect) {
-            this.stopSelect.value = this.selectedStopName;
-            this.stopSelect.addEventListener("change", (e) => this.handleStopChange(e.target.value));
-        }
-
-        if (this.btnLocateMe) {
-            this.btnLocateMe.addEventListener("click", () => this.locateStudentGps());
-        }
-
+        this.btnLocateMe?.addEventListener("click", () => this.locateStudentGps());
         this.attachHomeAddressAutocomplete();
         this.attachMinutesInput();
 
-        if (this.soundToggle) {
-            this.soundToggle.addEventListener("change", (e) => {
-                this.isAudioAlertEnabled = e.target.checked;
-                if (this.sideSoundCheckbox) this.sideSoundCheckbox.checked = e.target.checked;
-            });
-        }
-
-        if (this.btnTestSound) {
-            this.btnTestSound.addEventListener("click", () => {
-                this.playProximityAlertChime();
-                this.showToastNotification("🔊 Sound Test", "Alert chime sound verified successfully!", "toast-info");
-            });
-        }
-
-        // Request browser notification permission early
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
 
-        // 6. Initial fetch and start real-time telemetry polling
+        // Live data: the stream pushes changes; the 3-second poll covers gaps
         this.fetchLiveTrackingData();
         this.startLiveStream();
-        this.pollInterval = setInterval(() => this.fetchLiveTrackingData(), 3000);
+        setInterval(() => this.fetchLiveTrackingData(), 3000);
     }
 
-    /**
-     * Synchronizes UI controls (chips, dropdowns, inputs) with stored settings.
-     */
-    syncPreferencesUi() {
-        // Sync Home & Notification summary lines in the main menu
-        this.updateMenuSummaries();
+    // =====================================================================
+    // Menu: Home and Notification settings
+    // =====================================================================
 
-        // Sync Home edit page
-        if (this.homeAddressInput) {
-            this.homeAddressInput.value = this.homeAddress;
-        }
+    /** Fills the menu's inputs and summary lines from the saved settings (called when a menu page opens). */
+    syncPreferencesUi() {
+        this.updateMenuSummaries();
+        if (this.homeAddressInput) this.homeAddressInput.value = this.homeAddress;
         this.pendingHomePlace = null;
         this.hideHomeSuggestions();
-
-        // Sync Alert Frequency Select
-        if (this.sideFreqSelect) {
-            this.sideFreqSelect.value = this.alertFrequency;
-        }
-
-        // Sync Sound Checkbox
-        if (this.sideSoundCheckbox) {
-            this.sideSoundCheckbox.checked = this.isAudioAlertEnabled;
-        }
-
-        // Sync Time Chips
-        document.querySelectorAll(".side-time-chip").forEach(chip => {
-            const min = parseInt(chip.getAttribute("data-min"), 10);
-            if (min === this.alertThresholdMinutes) {
-                chip.classList.add("active");
-            } else {
-                chip.classList.remove("active");
-            }
-        });
-
-        if (this.customMinutesInput) {
-            this.customMinutesInput.value = this.alertThresholdMinutes;
-        }
+        if (this.sideFreqSelect) this.sideFreqSelect.value = this.alertFrequency;
+        if (this.customMinutesInput) this.customMinutesInput.value = this.alertThresholdMinutes;
         this.updateMinutesHint(this.alertThresholdMinutes);
-
-        // Sync Front Bus Select to match current route
-        if (this.frontBusSelect) {
-            const busForRoute = this.buses.find(b => b.assigned_route_id === this.selectedRouteId);
-            if (busForRoute) {
-                this.frontBusSelect.value = busForRoute.bus_id;
-            }
-        }
     }
 
-    /**
-     * Name shown for Home: the typed address if the student entered one, otherwise the stop / GPS label.
-     */
+    /** Name shown for Home: the typed address if the rider entered one, otherwise the stop name. */
     getHomeDisplayName() {
         return this.homeAddress || this.homePosition;
     }
 
-    /**
-     * Refreshes the small summary lines under "Home" and "Notification" in the main menu.
-     */
+    /** Refreshes the small summary lines under "Home" and "Notification" in the main menu. */
     updateMenuSummaries() {
         if (this.sideHomeLabel) {
             this.sideHomeLabel.textContent = this.getHomeDisplayName();
@@ -477,9 +383,7 @@ class StudentTracker {
         }
     }
 
-    /**
-     * Builds the list of known places (unique stops across all routes) for Home address suggestions.
-     */
+    /** Unique stops across all routes, offered as Home address suggestions. */
     buildHomePlaces() {
         const byName = new Map();
         this.allRoutes.forEach(route => {
@@ -502,7 +406,7 @@ class StudentTracker {
     }
 
     /**
-     * Returns the best matching places for what the student has typed so far.
+     * Best matching places for what the rider has typed so far.
      * Names starting with the text come first, then names containing a word that starts with it,
      * then any other name or landmark containing it.
      */
@@ -512,18 +416,18 @@ class StudentTracker {
         const scored = [];
         this.homePlaces.forEach(place => {
             const name = place.name.toLowerCase();
-            const hint = place.hint.toLowerCase();
             let score = -1;
             if (name.startsWith(q)) score = 0;
             else if (name.split(/[\s\-/]+/).some(w => w.startsWith(q))) score = 1;
             else if (name.includes(q)) score = 2;
-            else if (hint.includes(q)) score = 3;
+            else if (place.hint.toLowerCase().includes(q)) score = 3;
             if (score >= 0) scored.push({ place, score });
         });
         scored.sort((a, b) => a.score - b.score || a.place.name.localeCompare(b.place.name));
         return scored.slice(0, 6).map(s => s.place);
     }
 
+    /** Type-ahead on the Home address box (arrow keys, Enter, Escape, tap a suggestion). */
     attachHomeAddressAutocomplete() {
         const input = this.homeAddressInput;
         if (!input || !this.homeSuggestionsBox) return;
@@ -538,29 +442,28 @@ class StudentTracker {
         });
 
         input.addEventListener("keydown", (e) => {
-            const open = this.homeSuggestions.length > 0;
-            if (e.key === "ArrowDown" && open) {
+            const n = this.homeSuggestions.length;
+            if (e.key === "ArrowDown" && n) {
                 e.preventDefault();
-                this.setActiveSuggestion((this.activeSuggestionIdx + 1) % this.homeSuggestions.length);
-            } else if (e.key === "ArrowUp" && open) {
+                this.setActiveSuggestion((this.activeSuggestionIdx + 1) % n);
+            } else if (e.key === "ArrowUp" && n) {
                 e.preventDefault();
-                const n = this.homeSuggestions.length;
                 this.setActiveSuggestion((this.activeSuggestionIdx - 1 + n) % n);
             } else if (e.key === "Enter") {
                 e.preventDefault();
-                if (open && this.activeSuggestionIdx >= 0) {
+                if (n && this.activeSuggestionIdx >= 0) {
                     this.pickHomeSuggestion(this.homeSuggestions[this.activeSuggestionIdx]);
                 } else if (typeof saveHomeAddress === "function") {
-                    saveHomeAddress();
+                    saveHomeAddress();   // defined by the page template
                 }
-            } else if (e.key === "Escape" && open) {
+            } else if (e.key === "Escape" && n) {
                 e.preventDefault();
                 e.stopPropagation(); // close the list, not the whole menu
                 this.hideHomeSuggestions();
             }
         });
 
-        // Close the list when tapping elsewhere in the menu
+        // Close the list when tapping elsewhere
         document.addEventListener("pointerdown", (e) => {
             if (!e.target.closest(".side-address-wrap")) this.hideHomeSuggestions();
         });
@@ -579,31 +482,26 @@ class StudentTracker {
         }
 
         const q = query.trim();
+        const span = (className) => {
+            const el = document.createElement("span");
+            el.className = className;
+            return el;
+        };
         this.homeSuggestions.forEach((place, idx) => {
             const row = document.createElement("div");
             row.className = "side-suggestion-row";
             row.setAttribute("role", "option");
             row.id = `side-home-suggestion-${idx}`;
 
-            const icon = document.createElement("span");
-            icon.className = "side-suggestion-icon";
+            const icon = span("side-suggestion-icon");
             icon.textContent = "📍";
-
-            const text = document.createElement("span");
-            text.className = "side-suggestion-text";
-
-            const nameEl = document.createElement("span");
-            nameEl.className = "side-suggestion-name";
+            const text = span("side-suggestion-text");
+            const nameEl = span("side-suggestion-name");
             this.appendHighlighted(nameEl, place.name, q);
-
-            const subEl = document.createElement("span");
-            subEl.className = "side-suggestion-sub";
+            const subEl = span("side-suggestion-sub");
             subEl.textContent = place.hint || place.routes.join(", ");
-
-            text.appendChild(nameEl);
-            text.appendChild(subEl);
-            row.appendChild(icon);
-            row.appendChild(text);
+            text.append(nameEl, subEl);
+            row.append(icon, text);
 
             // pointerdown (not click) so the pick happens before the input loses focus
             row.addEventListener("pointerdown", (e) => {
@@ -614,7 +512,7 @@ class StudentTracker {
         });
 
         box.classList.add("open");
-        if (this.homeAddressInput) this.homeAddressInput.setAttribute("aria-expanded", "true");
+        this.homeAddressInput?.setAttribute("aria-expanded", "true");
     }
 
     /** Writes text into el, wrapping the part that matches the typed text in <mark>. */
@@ -624,20 +522,15 @@ class StudentTracker {
             el.textContent = text;
             return;
         }
-        el.appendChild(document.createTextNode(text.slice(0, i)));
         const mark = document.createElement("mark");
         mark.textContent = text.slice(i, i + query.length);
-        el.appendChild(mark);
-        el.appendChild(document.createTextNode(text.slice(i + query.length)));
+        el.append(text.slice(0, i), mark, text.slice(i + query.length));
     }
 
     setActiveSuggestion(idx) {
         this.activeSuggestionIdx = idx;
-        const rows = this.homeSuggestionsBox ? this.homeSuggestionsBox.children : [];
-        Array.from(rows).forEach((row, i) => row.classList.toggle("active", i === idx));
-        if (this.homeAddressInput) {
-            this.homeAddressInput.setAttribute("aria-activedescendant", idx >= 0 ? `side-home-suggestion-${idx}` : "");
-        }
+        Array.from(this.homeSuggestionsBox?.children || []).forEach((row, i) => row.classList.toggle("active", i === idx));
+        this.homeAddressInput?.setAttribute("aria-activedescendant", idx >= 0 ? `side-home-suggestion-${idx}` : "");
     }
 
     pickHomeSuggestion(place) {
@@ -661,9 +554,7 @@ class StudentTracker {
         }
     }
 
-    /**
-     * Notification minutes box: the student just types a number; it is applied automatically.
-     */
+    /** Notification minutes box: the rider just types a number; it is applied automatically. */
     attachMinutesInput() {
         const input = this.customMinutesInput;
         if (!input) return;
@@ -678,9 +569,7 @@ class StudentTracker {
         const apply = () => {
             clearTimeout(this.minutesApplyTimer);
             const val = readValue();
-            if (val !== null && val !== this.alertThresholdMinutes) {
-                this.setAlertLeadMinutes(val, { silent: true });
-            }
+            if (val !== null && val !== this.alertThresholdMinutes) this.setAlertLeadMinutes(val);
         };
 
         input.addEventListener("input", () => {
@@ -724,8 +613,8 @@ class StudentTracker {
     }
 
     /**
-     * Saves the student's home address. If it matches a suggested place, the Home pin moves there;
-     * otherwise the text is kept as the Home label and the pin stays where it was.
+     * Saves the Home address (called by the page's Save button). If it matches a known stop,
+     * the Home dot moves there; otherwise the text is kept as Home's name and the dot stays put.
      */
     setHomeAddress(address) {
         this.homeAddress = (address || "").trim();
@@ -744,347 +633,74 @@ class StudentTracker {
             this.homePosition = place.name;
             this.homeLat = place.lat;
             this.homeLng = place.lng;
-            localStorage.setItem("busplus_home_stop", this.homePosition);
-            localStorage.setItem("busplus_home_lat", this.homeLat);
-            localStorage.setItem("busplus_home_lng", this.homeLng);
+            settings.set("busplus_home_stop", this.homePosition);
+            settings.set("busplus_home_lat", this.homeLat);
+            settings.set("busplus_home_lng", this.homeLng);
         }
 
-        if (this.homeAddress) {
-            localStorage.setItem("busplus_home_address", this.homeAddress);
-        } else {
-            localStorage.removeItem("busplus_home_address");
-        }
+        if (this.homeAddress) settings.set("busplus_home_address", this.homeAddress);
+        else settings.remove("busplus_home_address");
+
         this.updateMenuSummaries();
         this.updateMinutesHint(this.alertThresholdMinutes);
         this.alertTriggerCount = 0;
-        this.latestAlert = null;
         this.fetchLiveTrackingData();
-        window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng, this.getHomeDisplayName());
-        this.showToastNotification("🏡 Home Saved", `Home set to ${this.getHomeDisplayName()}`, "toast-success");
+        window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng);
+        this.showToast("🏡 Home Saved", "toast-success");
     }
 
-    /**
-     * Populates the Front Quick Dropdown for Main Stops.
-     */
-    populateFrontStopsDropdown(routeId) {
-        if (!this.frontStopSelect) return;
-        this.frontStopSelect.innerHTML = "";
-
-        const route = this.allRoutes.find(r => r.route_id === routeId);
-        if (!route || !route.stops) return;
-
-        let hasSelected = false;
-        route.stops.forEach(stop => {
-            const opt = document.createElement("option");
-            opt.value = stop.stop_name;
-            opt.textContent = `${stop.sequence_order}. ${stop.stop_name} (${stop.scheduled_morning_time})`;
-            if (stop.stop_name.toLowerCase().includes(this.selectedStopName.toLowerCase()) ||
-                this.selectedStopName.toLowerCase().includes(stop.stop_name.toLowerCase())) {
-                opt.selected = true;
-                hasSelected = true;
-            }
-            this.frontStopSelect.appendChild(opt);
-        });
-
-        if (!hasSelected && route.stops.length > 0) {
-            this.frontStopSelect.options[0].selected = true;
-            this.selectedStopName = route.stops[0].stop_name;
-        }
-    }
-
-    /**
-     * Populates Side Menu Home Position Stop Dropdown with all stops across all routes.
-     */
-    populateSideHomeDropdown() {
-        if (!this.sideHomeSelect) return;
-        this.sideHomeSelect.innerHTML = "";
-
-        const seenStops = new Set();
-        this.allRoutes.forEach(route => {
-            if (!route.stops) return;
-            route.stops.forEach(stop => {
-                if (!seenStops.has(stop.stop_name)) {
-                    seenStops.add(stop.stop_name);
-                    const opt = document.createElement("option");
-                    opt.value = stop.stop_name;
-                    opt.textContent = `${stop.stop_name} (${route.route_code})`;
-                    if (stop.stop_name.toLowerCase().includes(this.homePosition.toLowerCase())) {
-                        opt.selected = true;
-                    }
-                    this.sideHomeSelect.appendChild(opt);
-                }
-            });
-        });
-    }
-
-    populateStopsDropdown(routeId) {
-        if (!this.stopSelect) return;
-        this.stopSelect.innerHTML = "";
-        const route = this.allRoutes.find(r => r.route_id === routeId);
-        if (!route || !route.stops) return;
-
-        route.stops.forEach(stop => {
-            const opt = document.createElement("option");
-            opt.value = stop.stop_name;
-            opt.textContent = `${stop.sequence_order}. ${stop.stop_name} (${stop.scheduled_morning_time})`;
-            if (stop.stop_name.toLowerCase().includes(this.selectedStopName.toLowerCase())) {
-                opt.selected = true;
-            }
-            this.stopSelect.appendChild(opt);
-        });
-    }
-
-    renderTimelineStops(routeId) {
-        const container = document.getElementById("timeline-stops-list");
-        if (!container) return;
-        container.innerHTML = "";
-
-        const route = this.allRoutes.find(r => r.route_id === routeId);
-        if (!route || !route.stops) return;
-
-        route.stops.forEach(stop => {
-            const isTarget = stop.stop_name.toLowerCase().includes(this.selectedStopName.toLowerCase());
-            const item = document.createElement("div");
-            item.className = `stop-timeline-item ${isTarget ? 'active-target' : ''}`;
-            item.innerHTML = `
-                <div class="stop-dot"></div>
-                <div style="flex:1;">
-                    <div style="font-size:0.825rem; font-weight:600; color:var(--text-primary);">${stop.sequence_order}. ${stop.stop_name}</div>
-                    <div style="font-size:0.75rem; color:var(--text-muted);">${stop.scheduled_morning_time} · ${stop.landmark_hint || "KU Stop"}</div>
-                </div>
-            `;
-            item.addEventListener("click", () => {
-                this.handleStopChange(stop.stop_name);
-                if (this.stopSelect) this.stopSelect.value = stop.stop_name;
-                if (this.frontStopSelect) this.frontStopSelect.value = stop.stop_name;
-                window.googleMapsHelper.panTo(stop.latitude, stop.longitude, 15);
-            });
-            container.appendChild(item);
-        });
-    }
-
-    /**
-     * Handlers for Front Drop-Down Quick Selection Bar
-     */
-    handleFrontBusChange(busId) {
-        const bus = this.buses.find(b => b.bus_id === busId);
-        if (!bus) return;
-
-        const routeId = bus.assigned_route_id || "KU-R01";
-        this.handleRouteChange(routeId);
-        this.showToastNotification("🚌 Bus Selected", `${bus.bus_name || bus.bus_number} selected.`, "toast-info");
-    }
-
-    handleFrontStopChange(stopName) {
-        this.handleStopChange(stopName);
-        if (this.stopSelect) this.stopSelect.value = stopName;
-
-        // Pan to selected stop
-        const route = this.allRoutes.find(r => r.route_id === this.selectedRouteId);
-        if (route && route.stops) {
-            const stop = route.stops.find(s => s.stop_name.toLowerCase().includes(stopName.toLowerCase()));
-            if (stop) {
-                window.googleMapsHelper.panTo(stop.latitude, stop.longitude, 15);
-            }
-        }
-    }
-
-    handleRouteChange(routeId) {
-        this.selectedRouteId = routeId;
-        this.populateStopsDropdown(routeId);
-        this.populateFrontStopsDropdown(routeId);
-
-        if (this.stopSelect && this.stopSelect.options.length > 0) {
-            this.selectedStopName = this.stopSelect.options[0].value;
-        }
-
-        // Sync Front Bus Select
-        if (this.frontBusSelect) {
-            const busForRoute = this.buses.find(b => b.assigned_route_id === routeId);
-            if (busForRoute) {
-                this.frontBusSelect.value = busForRoute.bus_id;
-            }
-        }
-
-        // Sync Route Chips
-        document.querySelectorAll(".phone-chip-btn").forEach(btn => {
-            if (btn.getAttribute("data-route-id") === routeId) {
-                btn.classList.add("active");
-            } else {
-                btn.classList.remove("active");
-            }
-        });
-
-        this.renderTimelineStops(routeId);
-        this.alertTriggerCount = 0;
-        this.fetchLiveTrackingData();
-    }
-
-    handleStopChange(stopName) {
-        this.selectedStopName = stopName;
-        if (this.frontStopSelect && this.frontStopSelect.value !== stopName) {
-            this.frontStopSelect.value = stopName;
-        }
-        if (this.stopSelect && this.stopSelect.value !== stopName) {
-            this.stopSelect.value = stopName;
-        }
-        this.renderTimelineStops(this.selectedRouteId);
-        this.updateMinutesHint(this.alertThresholdMinutes);
-        this.alertTriggerCount = 0;
-        this.fetchLiveTrackingData();
-    }
-
-    /**
-     * Home Position Management
-     */
-    setHomePositionFromStop(stopName) {
-        let matchedStop = null;
-        for (const route of this.allRoutes) {
-            if (route.stops) {
-                matchedStop = route.stops.find(s => s.stop_name.toLowerCase().includes(stopName.toLowerCase()));
-                if (matchedStop) break;
-            }
-        }
-
-        if (matchedStop) {
-            this.homePosition = matchedStop.stop_name;
-            this.homeLat = matchedStop.latitude;
-            this.homeLng = matchedStop.longitude;
-
-            localStorage.setItem("busplus_home_stop", this.homePosition);
-            localStorage.setItem("busplus_home_lat", this.homeLat);
-            localStorage.setItem("busplus_home_lng", this.homeLng);
-
-            this.updateMenuSummaries();
-
-            window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng, this.getHomeDisplayName());
-            this.showToastNotification("🏡 Home Position Set", `Home stop set to ${this.homePosition}`, "toast-success");
-        }
-    }
-
-    setHomeFromGps() {
-        if (!navigator.geolocation) {
-            alert("Geolocation is not supported by your browser.");
-            return;
-        }
-
-        this.showToastNotification("📍 Locating", "Fetching your live GPS coordinates for Home...", "toast-info");
-
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                this.homeLat = lat;
-                this.homeLng = lng;
-                this.homePosition = `GPS Home (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-
-                localStorage.setItem("busplus_home_stop", this.homePosition);
-                localStorage.setItem("busplus_home_lat", this.homeLat);
-                localStorage.setItem("busplus_home_lng", this.homeLng);
-
-                this.updateMenuSummaries();
-
-                window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng, this.homeAddress || "My Home (GPS)");
-                this.showToastNotification("🏡 Home Saved", "Your live GPS position has been set as Home.", "toast-success");
-            },
-            (err) => {
-                console.warn("Geolocation failed:", err);
-                alert("Could not access your location. Please check browser GPS permissions.");
-            },
-            { enableHighAccuracy: true, timeout: 8000 }
-        );
-    }
-
-    viewHomeOnMap() {
-        if (!this.homeLat || !this.homeLng) {
-            alert("Please set your home position first.");
-            return;
-        }
-        window.googleMapsHelper.panTo(this.homeLat, this.homeLng, 16);
-        window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng, this.getHomeDisplayName());
-        this.showToastNotification("🏡 Home Focused", `Map centered on ${this.getHomeDisplayName()}`, "toast-info");
-    }
-
-    /**
-     * Notification Lead Time & Repeat Frequency Settings
-     */
-    setAlertLeadMinutes(minutes, { silent = false } = {}) {
+    /** Saves how many minutes before arrival the alert should go off. */
+    setAlertLeadMinutes(minutes) {
         this.alertThresholdMinutes = parseInt(minutes, 10);
-        localStorage.setItem("busplus_alert_lead_minutes", this.alertThresholdMinutes);
+        settings.set("busplus_alert_lead_minutes", this.alertThresholdMinutes);
 
-        document.querySelectorAll(".side-time-chip").forEach(chip => {
-            const m = parseInt(chip.getAttribute("data-min"), 10);
-            if (m === this.alertThresholdMinutes) {
-                chip.classList.add("active");
-            } else {
-                chip.classList.remove("active");
-            }
-        });
-
-        // Don't overwrite the box while the student is still typing in it
+        // Don't overwrite the box while the rider is still typing in it
         if (this.customMinutesInput && document.activeElement !== this.customMinutesInput) {
             this.customMinutesInput.value = this.alertThresholdMinutes;
         }
         this.updateMinutesHint(this.alertThresholdMinutes);
-
         this.updateMenuSummaries();
         this.alertTriggerCount = 0;
         this.fetchLiveTrackingData();
-        if (!silent) {
-            this.showToastNotification("⏱ Alert Time Updated", `Notification alert set to ${this.alertThresholdMinutes} minutes before arrival.`, "toast-info");
-        }
     }
 
+    /** Saves how often the alert repeats ("1", "2", "3" or "continuous"); called by the page's Repeat select. */
     setAlertFrequency(freqVal) {
         this.alertFrequency = freqVal;
-        localStorage.setItem("busplus_alert_frequency", freqVal);
+        settings.set("busplus_alert_frequency", freqVal);
         this.alertTriggerCount = 0;
         this.updateMenuSummaries();
-
-        const labels = {
-            "1": "1 Time",
-            "2": "2 Times",
-            "3": "3 Times",
-            "continuous": "Continuous (Every minute)"
-        };
-
-        this.showToastNotification("🔔 Alert Frequency", `Notification will repeat: ${labels[freqVal] || freqVal}`, "toast-info");
+        this.showToast("🔔 Alert Frequency", "toast-info");
     }
 
-    /**
-     * Obtains student's live GPS coordinates via HTML5 Geolocation API.
-     */
+    /** "Locate Me": shows the rider's GPS position on the map. */
     locateStudentGps() {
         if (!navigator.geolocation) {
             alert("Geolocation is not supported by your browser.");
             return;
         }
+        const setLabel = (text) => { if (this.btnLocateLabel) this.btnLocateLabel.textContent = text; };
 
-        this.btnLocateMe.innerHTML = "<span>📍</span> Locating...";
+        setLabel("Locating...");
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                this.studentLocation = { lat, lng };
-                window.googleMapsHelper.updateStudentLocationMarker(lat, lng, pos.coords.accuracy);
-                this.btnLocateMe.innerHTML = "<span>📍</span> GPS Active";
+                window.googleMapsHelper.updateStudentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+                setLabel("GPS Active");
                 this.btnLocateMe.classList.add("active");
-                this.btnLocateMe.classList.add("btn-primary");
-                this.showToastNotification("📍 GPS Located", "Your current location has been marked on the map.", "toast-success");
-                this.fetchLiveTrackingData();
+                this.showToast("📍 GPS Located", "toast-success");
             },
-            (err) => {
-                console.warn("Geolocation failed:", err);
-                this.btnLocateMe.innerHTML = "<span>📍</span> Locate Me";
+            () => {
+                setLabel("Locate Me");
                 alert("Could not access your location. Please check browser GPS permissions.");
             },
             { enableHighAccuracy: true, timeout: 8000 }
         );
     }
 
-    /**
-     * Polls the server for bus telemetry and evaluates proximity alerts.
-     */
+    // =====================================================================
+    // Live data
+    // =====================================================================
+
     /**
      * Live bus feed: the server pushes every change straight away (no waiting for the next poll).
      * If it drops, the browser reconnects by itself and the 3-second poll fills in meanwhile.
@@ -1104,83 +720,76 @@ class StudentTracker {
                 this.renderSheet();
                 // Arrival time to Home: refresh at most every 1.5 s
                 const now = Date.now();
-                if (now - (this.lastArrivalCheck || 0) > 1500) {
+                if (now - this.lastArrivalCheck > 1500) {
                     this.lastArrivalCheck = now;
                     this.checkArrival();
                 }
             } catch (err) { /* ignore a bad message */ }
         };
-        this.liveStream = es;
     }
 
+    /** Poll: fetches the buses when the live stream is down, then checks the Home arrival. */
     async fetchLiveTrackingData() {
         try {
-            // 1. Buses (only this rider's): from the live stream if it's connected, otherwise fetch them
             if (!this.streamLive) {
-                const busResp = await fetch(`/api/buses?audience=${this.audience}`);
-                const busData = await busResp.json();
-                if (busData.success && busData.buses) {
-                    this.latestBuses = busData.buses;
+                const resp = await fetch(`/api/buses?audience=${this.audience}`);
+                const data = await resp.json();
+                if (data.success && data.buses) {
+                    this.latestBuses = data.buses;
                     this.refreshMapBuses();
                     this.renderSheet();
                 }
             }
             await this.checkArrival();
         } catch (err) {
-            console.error("Error updating live tracking telemetry:", err);
+            // network blip: try again on the next tick
         }
     }
 
+    /** Asks the server how far the watched bus is from the Home stop; updates the 🏡 line and alerts. */
     async checkArrival() {
+        const target = this.getAlertTarget();
+        if (!target.routeId) {
+            this.updateHomeStrip(null, target);
+            return;
+        }
+        const params = new URLSearchParams({
+            route_id: target.routeId,
+            stop_name: target.stopName,
+            alert_threshold_minutes: this.alertThresholdMinutes,
+            audience: this.audience
+        });
+        if (target.busId) params.set("bus_id", target.busId);
+
         try {
-            // Arrival check for the student's Home stop
-            const target = this.getAlertTarget();
-            if (!target.routeId) {
-                this.updateHomeStrip(null, target);
+            const resp = await fetch(`/api/notification/check?${params}`);
+            const data = await resp.json();
+            if (!data.success) return;
+            if (!data.alert) {
+                this.updateHomeStrip(null, target);   // no bus of yours on this route
                 return;
             }
-            let notifUrl = `/api/notification/check?route_id=${encodeURIComponent(target.routeId)}` +
-                `&stop_name=${encodeURIComponent(target.stopName)}` +
-                `&alert_threshold_minutes=${this.alertThresholdMinutes}` +
-                `&audience=${this.audience}`;
-            if (target.busId) notifUrl += `&bus_id=${encodeURIComponent(target.busId)}`;
-
-            const notifResp = await fetch(notifUrl);
-            const notifData = await notifResp.json();
-
-            if (notifData.success && !notifData.alert) {
-                this.latestAlert = null;
-                this.updateHomeStrip(null, target);   // no bus of yours on this route
+            // Start the alert count again only when a different bus is being watched
+            if (data.alert.bus_id !== this.lastAlertBusId) {
+                this.lastAlertBusId = data.alert.bus_id;
+                this.alertTriggerCount = 0;
             }
-            if (notifData.success && notifData.alert) {
-                // Start the alert count again only when a different bus is being watched
-                if (notifData.alert.bus_id !== this.lastAlertBusId) {
-                    this.lastAlertBusId = notifData.alert.bus_id;
-                    this.alertTriggerCount = 0;
-                }
-                this.latestAlert = notifData.alert;
-                this.updateHomeStrip(notifData.alert, target);
-                this.updateAlertUi(notifData.alert);
-                if (this.busFilter) this.renderSheet(true); // refresh "To your Home" in bus details
-            }
+            this.updateHomeStrip(data.alert, target);
+            this.maybeAlert(data.alert);
         } catch (err) {
-            console.error("Error updating live tracking telemetry:", err);
+            // network blip: try again on the next tick
         }
     }
 
-    // =====================================================================
-    // Home stop alerts
-    // =====================================================================
-
-    /** The stop alerts are about: the Home stop the student picked (defaults to Malabotha More). */
+    /** The stop alerts are about: the rider's Home stop. */
     getAlertStopName() {
         return this.homePosition || "Malabotha More";
     }
 
     /**
-     * Works out which route / bus to watch for the Home stop:
-     *  - a selected bus → that bus (only if its route passes the Home stop)
-     *  - otherwise a selected route that passes the Home stop, or the first route that does;
+     * Which route / bus to watch for the Home stop:
+     *  - a selected bus: that bus (only if its route passes the Home stop)
+     *  - otherwise the selected route if it passes the Home stop, or the first route that does;
      *    the server then watches the nearest live bus on that route.
      */
     getAlertTarget() {
@@ -1192,7 +801,7 @@ class StudentTracker {
             const bus = this.latestBuses.find(b => b.bus_id === this.busFilter);
             const route = bus ? routeById(bus.assigned_route_id) : null;
             if (route && passes(route)) return { routeId: route.route_id, busId: bus.bus_id, stopName };
-            return { routeId: null, busId: bus?.bus_id, stopName, reason: "bus-not-on-route", bus };
+            return { routeId: null, busId: bus?.bus_id, stopName };
         }
 
         if (this.routeFilter && passes(routeById(this.routeFilter))) {
@@ -1200,47 +809,69 @@ class StudentTracker {
         }
 
         const first = this.allRoutes.find(passes);
-        return { routeId: first ? first.route_id : null, busId: null, stopName, reason: first ? null : "no-route" };
+        return { routeId: first ? first.route_id : null, busId: null, stopName };
     }
 
-    /** Updates the 🏡 line in the bottom sheet with the arrival time at the Home stop. */
+    /** Updates the 🏡 line in the sheet: arrival time at the Home stop, shown only while a live bus is coming. */
     updateHomeStrip(alertInfo, target) {
-        if (!this.homeStripText || !this.homeStripEta) return;
-        const stop = target?.stopName || this.getAlertStopName();
-        this.homeStrip?.classList.remove("is-alert");
+        if (!this.homeStrip || !this.homeStripText || !this.homeStripEta) return;
+        this.homeStrip.classList.remove("is-alert");
 
-        // Only shown while a live bus is heading to the Home stop; no explanation text otherwise
         const hasEta = alertInfo && alertInfo.is_active &&
             alertInfo.eta_minutes !== null && alertInfo.eta_minutes !== undefined;
-        if (this.homeStrip && this.homeStrip.hidden !== !hasEta) {
+        if (this.homeStrip.hidden !== !hasEta) {
             this.homeStrip.hidden = !hasEta;
             this.sheet?.refresh(); // header height changed
         }
         if (!hasEta) return;
 
         const eta = alertInfo.eta_minutes;
-        this.homeStripText.textContent = stop;
+        this.homeStripText.textContent = target.stopName;
         this.homeStripEta.textContent = alertInfo.urgency_level === "ARRIVED" ? "Here" : (eta < 1 ? "< 1 min" : `${Math.round(eta)} min`);
         if (alertInfo.is_alert_triggered && eta <= this.alertThresholdMinutes) {
-            this.homeStrip?.classList.add("is-alert");
+            this.homeStrip.classList.add("is-alert");
         }
+    }
+
+    /**
+     * Fires the arrival alert (chime, pop-up, browser notification) when the bus is within the
+     * rider's minutes, as many times as the Repeat setting allows (at least 40 s apart).
+     */
+    maybeAlert(alertInfo) {
+        const eta = alertInfo.eta_minutes;
+        if (!alertInfo.is_active || eta === null || eta === undefined) return;
+        if (!alertInfo.is_alert_triggered || eta > this.alertThresholdMinutes) return;
+
+        const maxRepeats = this.alertFrequency === "continuous" ? Infinity : parseInt(this.alertFrequency || "1", 10);
+        const now = Date.now();
+        const canTrigger = this.alertTriggerCount < maxRepeats &&
+            (this.alertTriggerCount === 0 || now - this.lastAlertTimestamp > 40000);
+        if (!canTrigger) return;
+
+        this.alertTriggerCount++;
+        this.lastAlertTimestamp = now;
+        this.playProximityAlertChime();
+
+        const title = alertInfo.alert_title + (this.alertTriggerCount > 1 ? ` (Alert #${this.alertTriggerCount})` : "");
+        this.showToast(title, "toast-warning");
+        this.triggerBrowserNotification(title, alertInfo.alert_message);
     }
 
     // =====================================================================
     // Bottom sheet: Select route / Select bus
     // =====================================================================
 
-    /** Refreshes the route list from the backend (/api/routes); keeps the page's copy if that fails. */
+    /** Refreshes the route list from /api/routes (includes routes the admin just added); keeps the page's copy if that fails. */
     async loadRoutesFromBackend() {
         try {
             const resp = await fetch("/api/routes");
             const data = await resp.json();
             if (data.success && Array.isArray(data.routes) && data.routes.length) {
                 this.allRoutes = data.routes;
-                this.homePlaces = this.buildHomePlaces();   // include stops of routes added by the admin
+                this.homePlaces = this.buildHomePlaces();
             }
         } catch (err) {
-            console.warn("Could not refresh routes from the server; using the page's copy.", err);
+            // use the routes the page came with
         }
     }
 
@@ -1264,19 +895,14 @@ class StudentTracker {
         });
     }
 
-    // ---------------------------------------------------------------------
-    // Select route: type-ahead search with a drop-down
-    // ---------------------------------------------------------------------
-
-    /** Routes whose name contains the typed letters (anywhere in the name). Empty text = all routes. */
+    /** Routes whose name contains the typed letters, best matches first. Empty text = all routes. */
     findRoutes(query) {
         const q = (query || "").trim().toLowerCase();
         const scored = [];
         this.allRoutes.forEach(route => {
             const name = (route.route_name || "").toLowerCase();
             let score = -1;
-            if (!q) score = 0;
-            else if (name.startsWith(q)) score = 0;
+            if (!q || name.startsWith(q)) score = 0;
             else if (name.split(/[\s\-/]+/).some(w => w.startsWith(q))) score = 1;
             else if (name.includes(q)) score = 2;
             if (score >= 0) scored.push({ route, score });
@@ -1285,6 +911,7 @@ class StudentTracker {
         return scored;
     }
 
+    /** "Select route" search box: type-ahead drop-down, arrow keys, Enter, Escape and the ✕ button. */
     attachRouteSearch() {
         const input = this.routeSearchInput;
         if (!input || !this.routeSearchDropdown) return;
@@ -1309,7 +936,7 @@ class StudentTracker {
                 this.setActiveRouteOption((this.activeRouteOptionIdx - 1 + n) % n);
             } else if (e.key === "Enter") {
                 e.preventDefault();
-                const pick = this.routeOptions[this.activeRouteOptionIdx >= 0 ? this.activeRouteOptionIdx : 0];
+                const pick = this.routeOptions[Math.max(this.activeRouteOptionIdx, 0)];
                 if (pick) this.pickRoute(pick.route.route_id);
             } else if (e.key === "Escape") {
                 e.preventDefault();
@@ -1343,7 +970,6 @@ class StudentTracker {
     renderRouteOptions(query) {
         const box = this.routeSearchDropdown;
         if (!box) return;
-        const esc = (v) => this.escapeHtml(v);
         const q = (query || "").trim();
         this.routeOptions = this.findRoutes(q);
         this.activeRouteOptionIdx = -1;
@@ -1352,8 +978,8 @@ class StudentTracker {
             box.innerHTML = `<div class="route-option-empty">No route found</div>`;
         } else {
             box.innerHTML = this.routeOptions.map(({ route }, idx) => `
-                <div class="route-option" role="option" id="route-option-${idx}" data-route-id="${esc(route.route_id)}">
-                    <span class="route-option-swatch" style="--route-color:${esc(route.color_hex)}"></span>
+                <div class="route-option" role="option" id="route-option-${idx}" data-route-id="${escapeHtml(route.route_id)}">
+                    <span class="route-option-swatch" style="--route-color:${escapeHtml(route.color_hex)}"></span>
                     <span class="route-option-name">${this.highlightHtml(route.route_name, q)}</span>
                 </div>`).join("");
             box.querySelectorAll(".route-option").forEach(opt => {
@@ -1372,10 +998,10 @@ class StudentTracker {
     highlightHtml(text, query) {
         const t = String(text ?? "");
         const i = query ? t.toLowerCase().indexOf(query.toLowerCase()) : -1;
-        if (i < 0) return this.escapeHtml(t);
-        return this.escapeHtml(t.slice(0, i)) +
-            `<mark>${this.escapeHtml(t.slice(i, i + query.length))}</mark>` +
-            this.escapeHtml(t.slice(i + query.length));
+        if (i < 0) return escapeHtml(t);
+        return escapeHtml(t.slice(0, i)) +
+            `<mark>${escapeHtml(t.slice(i, i + query.length))}</mark>` +
+            escapeHtml(t.slice(i + query.length));
     }
 
     setActiveRouteOption(idx) {
@@ -1403,11 +1029,11 @@ class StudentTracker {
         this.busFilter = null;
         if (this.sheet) this.sheet.forceFull = false;
         this.routeSearchInput?.blur();
-        if (this.sheet) this.sheet.snapTo("half");
+        this.sheet?.snapTo("half");
         this.afterSelectionChange();
     }
 
-    /** Shows the chosen route's name (and colour) in the search box, or empties it. */
+    /** Shows the chosen route's name (and colour) in the search box, or empties it; hides the box in bus details. */
     syncRouteSearchBox() {
         const route = this.allRoutes.find(r => r.route_id === this.routeFilter);
         if (this.routeSearchInput && document.activeElement !== this.routeSearchInput) {
@@ -1417,7 +1043,7 @@ class StudentTracker {
             this.routeSearchWrap.classList.toggle("has-route", !!route);
             this.routeSearchWrap.style.setProperty("--route-color", route ? route.color_hex : "#0866ff");
             if (this.routeSearchWrap.hidden !== !!this.busFilter) {
-                this.routeSearchWrap.hidden = !!this.busFilter; // bus details view: just the bus
+                this.routeSearchWrap.hidden = !!this.busFilter;
                 this.sheet?.refresh();
             }
         }
@@ -1425,13 +1051,8 @@ class StudentTracker {
         if (this.routeSearchClear) this.routeSearchClear.hidden = !route;
     }
 
-    // ---------------------------------------------------------------------
-    // Selection
-    // ---------------------------------------------------------------------
-
     selectBus(busId) {
-        const bus = this.latestBuses.find(b => b.bus_id === busId);
-        if (!bus) return;
+        if (!this.latestBuses.some(b => b.bus_id === busId)) return;
         this.busFilter = busId;   // the route choice (if any) is kept for "back"
         this.afterSelectionChange();
     }
@@ -1442,7 +1063,6 @@ class StudentTracker {
     }
 
     afterSelectionChange() {
-        this.latestAlert = null;
         this.syncRouteSearchBox();
         this.renderSheet(true);
         // Raise the sheet first so the map fits the area that stays visible above it
@@ -1454,7 +1074,7 @@ class StudentTracker {
         this.fetchLiveTrackingData();
     }
 
-    /** Route ids whose lines should be visible (null = all). */
+    /** Route ids of the current selection (null = all). */
     getVisibleRouteIds() {
         if (this.busFilter) {
             const bus = this.latestBuses.find(b => b.bus_id === this.busFilter);
@@ -1475,11 +1095,12 @@ class StudentTracker {
 
     /** Route lines to draw: only routes with a bus online right now (within the current selection). */
     getShownRouteIds() {
-        const selected = this.getVisibleRouteIds();          // null = every route
+        const selected = this.getVisibleRouteIds();
         const live = new Set(this.latestBuses.filter(b => b.is_active).map(b => b.assigned_route_id));
         return [...live].filter(id => !selected || selected.includes(id));
     }
 
+    /** Puts the selected live buses, their trails and route lines on the map. */
     refreshMapBuses() {
         const helper = window.googleMapsHelper;
         const visible = this.getVisibleLiveBuses();
@@ -1488,36 +1109,31 @@ class StudentTracker {
             this.lastShownRoutes = shown;
             helper.showRoutes(shown ? shown.split(",") : []);
         }
-        helper.updateTrails(visible);      // red line where each bus has driven
+        helper.updateTrails(visible);
         helper.updateActiveBuses(visible);
     }
 
-    isDesktop() {
-        return window.matchMedia("(min-width: 900px)").matches;
-    }
-
+    /** Redraws the map for the current selection; with fit, zooms to it (clear of the sheet / side panel). */
     applyMapFilter({ fit = false } = {}) {
         const helper = window.googleMapsHelper;
-        const routeIds = this.getVisibleRouteIds();
         this.lastShownRoutes = null;          // redraw the route lines for the new selection
         this.refreshMapBuses();
         if (!fit) return;
 
-        // Keep what we zoom to clear of the panel: below it on phones, beside it on computers
-        const desktop = this.isDesktop();
-        const bottomPx = desktop ? 24 : (this.sheet ? Math.min(this.sheet.visiblePx, this.sheet.snaps.half) : 150);
-        const leftPx = desktop ? 420 : 24;
+        const wide = isWideScreen();
+        const bottomPx = wide ? 24 : (this.sheet ? Math.min(this.sheet.visiblePx, this.sheet.snaps.half) : 150);
+        const leftPx = wide ? 420 : 24;
         const bus = this.busFilter ? this.latestBuses.find(b => b.bus_id === this.busFilter) : null;
         if (bus && bus.is_active) {
             helper.fitToPoints([[bus.current_latitude, bus.current_longitude]], bottomPx, leftPx);
         } else {
-            helper.fitToPoints(helper.getRoutePoints(routeIds), bottomPx, leftPx);
+            helper.fitToPoints(helper.getRoutePoints(this.getVisibleRouteIds()), bottomPx, leftPx);
         }
     }
 
     /**
      * Draws the sheet list for the current selection. Skips the redraw when nothing visible changed
-     * (the list is refreshed every poll), unless force is true.
+     * (the list is refreshed on every update), unless force is true.
      */
     renderSheet(force = false) {
         if (!this.sheetContent) return;
@@ -1529,244 +1145,121 @@ class StudentTracker {
         if (!force && signature === this.lastSheetSignature) return;
         this.lastSheetSignature = signature;
 
-        const routeById = (id) => this.allRoutes.find(r => r.route_id === id);
-        // Live buses first, then offline ones
-        const ordered = (list) => [...list].sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0));
-
         if (this.sheetBack) this.sheetBack.hidden = !this.busFilter;
         this.syncRouteSearchBox();
 
-        // No explanation lines under the heading
-        this.sheetSubtitle.textContent = "";
-
         if (this.busFilter) {
             const bus = this.latestBuses.find(b => b.bus_id === this.busFilter);
-            const route = bus ? routeById(bus.assigned_route_id) : null;
+            const route = bus ? this.allRoutes.find(r => r.route_id === bus.assigned_route_id) : null;
             this.sheetTitle.textContent = bus ? (bus.bus_name || bus.bus_number) : "Bus";
             this.sheetContent.innerHTML = bus ? this.busDetailHtml(bus, route) : "";
-            this.sheetCount && (this.sheetCount.textContent = "");
-            this.sheet?.refresh();
-            return;
+            if (this.sheetCount) this.sheetCount.textContent = "";
+        } else {
+            const list = this.routeFilter
+                ? this.latestBuses.filter(b => b.assigned_route_id === this.routeFilter)
+                : this.latestBuses;
+            const liveFirst = [...list].sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0));
+            this.sheetTitle.textContent = this.routeFilter ? "Buses" : "All buses";
+            if (this.sheetCount) this.sheetCount.textContent = String(list.length);
+            this.sheetContent.innerHTML = liveFirst.map(b => this.busRowHtml(b)).join("");
         }
-
-        const list = this.routeFilter
-            ? this.latestBuses.filter(b => b.assigned_route_id === this.routeFilter)
-            : this.latestBuses;
-
-        this.sheetTitle.textContent = this.routeFilter ? "Buses" : "All buses";
-        this.sheetCount && (this.sheetCount.textContent = String(list.length));
-        this.sheetContent.innerHTML = ordered(list).map(b => this.busRowHtml(b)).join("");
         this.sheet?.refresh();
     }
 
-    /** One bus in the list: colour icon (grey = offline, green dot = live) and its name. */
+    /** One bus in the list: icon in the bus's colour (solid + green dot = live, light = offline) and its name. */
     busRowHtml(bus) {
-        const esc = (v) => this.escapeHtml(v);
         const live = !!bus.is_active;
+        const name = escapeHtml(bus.bus_name || bus.bus_number);
         return `
-            <button type="button" class="sheet-row" data-bus-id="${esc(bus.bus_id)}" aria-label="${esc(bus.bus_name || bus.bus_number)}, ${live ? "live" : "offline"}">
-                <span class="sheet-bus-dot ${live ? "is-live" : "is-offline"}" style="--bus-color:${esc(bus.color_hex || "#0866FF")}">${BUS_ICON_SVG}</span>
+            <button type="button" class="sheet-row" data-bus-id="${escapeHtml(bus.bus_id)}" aria-label="${name}, ${live ? "live" : "offline"}">
+                <span class="sheet-bus-dot ${live ? "is-live" : "is-offline"}" style="--bus-color:${escapeHtml(bus.color_hex || "#0866FF")}">${BUS_ICON_SVG}</span>
                 <span class="sheet-row-text">
-                    <span class="sheet-row-title">${esc(bus.bus_name || bus.bus_number)}</span>
+                    <span class="sheet-row-title">${name}</span>
                 </span>
                 <span class="sheet-row-chevron">›</span>
             </button>`;
     }
 
-    /** Bus details: just the facts, no explanation text. */
+    /** Bus details: speed, next stop, route and driver. */
     busDetailHtml(bus, route) {
-        const esc = (v) => this.escapeHtml(v);
         const live = !!bus.is_active;
+        const cell = (label, value) => `
+                    <div class="sheet-detail-cell">
+                        <div class="sheet-detail-label">${label}</div>
+                        <div class="sheet-detail-value">${value}</div>
+                    </div>`;
         return `
             <div class="sheet-bus-detail">
                 <div class="sheet-detail-grid">
-                    <div class="sheet-detail-cell">
-                        <div class="sheet-detail-label">Speed</div>
-                        <div class="sheet-detail-value">${live ? `${Math.round(bus.speed_kmh || 0)} km/h` : "--"}</div>
-                    </div>
-                    <div class="sheet-detail-cell">
-                        <div class="sheet-detail-label">Next stop</div>
-                        <div class="sheet-detail-value">${live ? esc(bus.next_stop_name || "--") : "--"}</div>
-                    </div>
-                    <div class="sheet-detail-cell">
-                        <div class="sheet-detail-label">Route</div>
-                        <div class="sheet-detail-value">${esc(route ? route.route_name : bus.assigned_route_id)}</div>
-                    </div>
-                    <div class="sheet-detail-cell">
-                        <div class="sheet-detail-label">Driver</div>
-                        <div class="sheet-detail-value">${esc(bus.driver_name || "--")}</div>
-                    </div>
+                    ${cell("Speed", live ? `${Math.round(bus.speed_kmh || 0)} km/h` : "--")}
+                    ${cell("Next stop", live ? escapeHtml(bus.next_stop_name || "--") : "--")}
+                    ${cell("Route", escapeHtml(route ? route.route_name : bus.assigned_route_id))}
+                    ${cell("Driver", escapeHtml(bus.driver_name || "--"))}
                 </div>
             </div>`;
     }
 
-    escapeHtml(value) {
-        return String(value ?? "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-    }
+    // =====================================================================
+    // Alert output: sound, pop-up, browser notification
+    // =====================================================================
 
-    /**
-     * Updates the UI cards and triggers alerts according to student's repeat count and lead time.
-     */
-    updateAlertUi(alertInfo) {
-        const frontEtaBadge = document.getElementById("front-eta-badge");
-
-        if (!alertInfo.is_active || alertInfo.eta_minutes === null || alertInfo.eta_minutes === undefined) {
-            if (this.etaNumber) this.etaNumber.textContent = "--";
-            if (this.etaDistance) this.etaDistance.textContent = "--";
-            if (this.etaClock) this.etaClock.textContent = "--";
-            if (this.etaSpeed) this.etaSpeed.textContent = "--";
-            if (frontEtaBadge) frontEtaBadge.classList.remove("eta-alert-pulsing");
-            if (this.targetStopLabel) this.targetStopLabel.textContent = alertInfo.target_stop_name || this.selectedStopName;
-            if (this.busNameLabel) this.busNameLabel.textContent = `${alertInfo.bus_name || alertInfo.bus_number} (Awaiting GPS)`;
-            if (this.alertStatusPill) {
-                this.alertStatusPill.className = "alert-pill pill-info";
-                this.alertStatusPill.innerHTML = `⏱ Awaiting GPS`;
-            }
-            if (this.alertBannerCard) {
-                this.alertBannerCard.classList.remove("proximity-alert-active");
-            }
-            return;
-        }
-
-        const etaMinutes = alertInfo.eta_minutes;
-        const distanceKm = alertInfo.distance_km;
-        const arrivalClock = alertInfo.estimated_arrival_clock_time;
-        const busName = alertInfo.bus_name || alertInfo.bus_number;
-
-        if (this.etaNumber) this.etaNumber.textContent = etaMinutes < 1 ? "< 1" : etaMinutes.toFixed(1);
-        if (this.etaDistance) this.etaDistance.textContent = `${distanceKm} km`;
-        if (this.etaClock) this.etaClock.textContent = arrivalClock;
-        if (this.etaSpeed) this.etaSpeed.textContent = `${Math.round(alertInfo.bus_speed_kmh || 0)} km/h`;
-        if (this.targetStopLabel) this.targetStopLabel.textContent = alertInfo.target_stop_name;
-        if (this.busNameLabel) this.busNameLabel.textContent = busName;
-
-        // Proximity Warning Evaluation
-        if (alertInfo.is_alert_triggered && etaMinutes <= this.alertThresholdMinutes) {
-            if (frontEtaBadge) frontEtaBadge.classList.add("eta-alert-pulsing");
-            if (this.alertBannerCard) {
-                this.alertBannerCard.classList.add("proximity-alert-active");
-            }
-            if (this.alertStatusPill) {
-                this.alertStatusPill.className = "alert-pill pill-warning";
-                this.alertStatusPill.innerHTML = `🔔 ${Math.round(etaMinutes)} MIN ALERT`;
-            }
-
-            // Evaluate Alert Repeat Frequency
-            const maxRepeats = this.alertFrequency === "continuous" ? Infinity : parseInt(this.alertFrequency || "1", 10);
-            const now = Date.now();
-            const minIntervalMs = 40000; // 40 seconds minimum between chime repeats
-            const canTrigger = (this.alertTriggerCount < maxRepeats) &&
-                               (this.alertTriggerCount === 0 || (now - this.lastAlertTimestamp) > minIntervalMs);
-
-            if (canTrigger) {
-                this.alertTriggerCount++;
-                this.lastAlertTimestamp = now;
-
-                if (this.isAudioAlertEnabled) {
-                    this.playProximityAlertChime();
-                }
-
-                const repeatTag = this.alertTriggerCount > 1 ? ` (Alert #${this.alertTriggerCount})` : "";
-                this.showToastNotification(
-                    alertInfo.alert_title + repeatTag,
-                    alertInfo.alert_message,
-                    "toast-warning"
-                );
-                this.triggerBrowserNotification(alertInfo.alert_title + repeatTag, alertInfo.alert_message);
-            }
-        } else {
-            // Normal transit info state
-            if (frontEtaBadge) frontEtaBadge.classList.remove("eta-alert-pulsing");
-            if (this.alertBannerCard) {
-                this.alertBannerCard.classList.remove("proximity-alert-active");
-            }
-            if (this.alertStatusPill) {
-                this.alertStatusPill.className = "alert-pill pill-info";
-                this.alertStatusPill.innerHTML = `⏱ En Route`;
-            }
-        }
-    }
-
-    /**
-     * Web Audio API Synthesizer: Generates a melodious two-tone chime bell.
-     */
+    /** Two-tone chime made with the Web Audio API (no sound file needed). */
     playProximityAlertChime() {
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (!AudioContext) return;
+            if (!this.audioCtx) this.audioCtx = new AudioContext();
+            if (this.audioCtx.state === "suspended") this.audioCtx.resume();
 
-            if (!this.audioCtx) {
-                this.audioCtx = new AudioContext();
-            }
-
-            if (this.audioCtx.state === "suspended") {
-                this.audioCtx.resume();
-            }
-
-            const now = this.audioCtx.currentTime;
-
-            // Tone 1: 587.33 Hz (D5)
-            const osc1 = this.audioCtx.createOscillator();
-            const gain1 = this.audioCtx.createGain();
-            osc1.type = "sine";
-            osc1.frequency.setValueAtTime(587.33, now);
-            gain1.gain.setValueAtTime(0.18, now);
-            gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-            osc1.connect(gain1);
-            gain1.connect(this.audioCtx.destination);
-            osc1.start(now);
-            osc1.stop(now + 0.5);
-
-            // Tone 2: 880 Hz (A5) for bright arrival chime
-            const osc2 = this.audioCtx.createOscillator();
-            const gain2 = this.audioCtx.createGain();
-            osc2.type = "sine";
-            osc2.frequency.setValueAtTime(880.0, now + 0.18);
-            gain2.gain.setValueAtTime(0.20, now + 0.18);
-            gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
-            osc2.connect(gain2);
-            gain2.connect(this.audioCtx.destination);
-            osc2.start(now + 0.18);
-            osc2.stop(now + 0.85);
+            const ctx = this.audioCtx;
+            const tone = (freq, start, end, volume) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, start);
+                gain.gain.setValueAtTime(volume, start);
+                gain.gain.exponentialRampToValueAtTime(0.001, end);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(start);
+                osc.stop(end);
+            };
+            const now = ctx.currentTime;
+            tone(587.33, now, now + 0.5, 0.18);          // D5
+            tone(880.0, now + 0.18, now + 0.85, 0.20);   // A5
         } catch (e) {
-            console.warn("Web Audio alert chime error:", e);
+            // no sound available: the pop-up still shows
         }
     }
 
+    /** System notification (only if the rider allowed notifications for this site). */
     triggerBrowserNotification(title, body) {
-        if ("Notification" in window && Notification.permission === "granted") {
-            try {
-                new Notification(title, {
-                    body: body,
-                    icon: "/static/favicon.ico"
-                });
-            } catch (e) {
-                // Ignore if in restricted context
-            }
+        if (!("Notification" in window) || Notification.permission !== "granted") return;
+        try {
+            new Notification(title, { body, icon: "/static/img/favicon.svg" });
+        } catch (e) {
+            // not allowed in this context
         }
     }
 
-    showToastNotification(title, message, typeClass = "toast-warning") {
+    /** Small pop-up under the top bar that disappears after a few seconds. type: toast-info | toast-success | toast-warning */
+    showToast(title, type = "toast-warning") {
         const container = document.getElementById("toast-container");
         if (!container) return;
 
         const toast = document.createElement("div");
-        toast.className = `toast ${typeClass}`;
-        toast.innerHTML = `
-            <div style="font-size:1.25rem;">🚌</div>
-            <div style="flex:1; font-weight:700; font-size:0.9rem; color:var(--text-primary); align-self:center;">${this.escapeHtml(title)}</div>
-        `;
+        toast.className = `toast ${type}`;
+        const icon = document.createElement("div");
+        icon.className = "toast-icon";
+        icon.textContent = "🚌";
+        const text = document.createElement("div");
+        text.className = "toast-title";
+        text.textContent = title;
+        toast.append(icon, text);
         container.appendChild(toast);
 
         setTimeout(() => {
-            toast.style.opacity = "0";
-            toast.style.transform = "translateX(100%)";
-            toast.style.transition = "all 0.3s ease";
+            toast.classList.add("is-leaving");
             setTimeout(() => toast.remove(), 300);
         }, 5500);
     }

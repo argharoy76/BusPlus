@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Live Bus Tracker - Khulna University{% endblock %}
+{% block title %}BusPlus · Live map{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/student.css') }}">
+{% include "_map_assets.html" %}
 {% endblock %}
 
 {% block content %}
-<!-- Fullscreen Phone Map Container -->
+<!-- Live map for students AND teachers (audience decides which buses are shown) -->
 <div class="phone-map-app">
     <!-- 1. Fullscreen Interactive Google Map -->
     <div id="student-map"></div>
@@ -20,7 +21,7 @@
         <!-- Small top menu: just the name BusPlus and the student ID -->
         <div class="side-menu-header">
             <span class="side-menu-title">BusPlus</span>
-            <span class="side-id-val" id="side-student-id">{{ student_id }}</span>
+            <span class="side-id-val" id="side-student-id">{{ rider_id }}</span>
         </div>
 
         <!-- Page 1: Main menu with two options -->
@@ -137,7 +138,6 @@
                 <button type="button" class="bus-sheet-back" id="bus-sheet-back" aria-label="Back" hidden>‹</button>
                 <div class="bus-sheet-titles">
                     <div class="bus-sheet-title-row"><div class="bus-sheet-title" id="bus-sheet-title">All buses</div><span class="bus-sheet-count" id="bus-sheet-count"></span></div>
-                    <div class="bus-sheet-subtitle" id="bus-sheet-subtitle"></div>
                 </div>
             </div>
 
@@ -152,18 +152,21 @@
         <!-- Scrollable list: all buses, the selected route's buses, or one bus's details -->
         <div class="bus-sheet-content" id="bus-sheet-content"></div>
     </section>
+
+    <!-- Pop-up messages (bus selected, arrival alerts, ...) -->
+    <div id="toast-container"></div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     // Who is using the map: "student" or "teacher" (each only sees their own buses)
-    const AUDIENCE = {{ (audience or "student") | tojson }};
+    const AUDIENCE = {{ audience | tojson }};
 
     // Remember the login on this device (tojson keeps names like O'Brien intact)
     try {
-        localStorage.setItem(`busplus_${AUDIENCE}_id`, {{ student_id | tojson }});
-        localStorage.setItem(`busplus_${AUDIENCE}_name`, {{ student_name | tojson }});
+        localStorage.setItem(`busplus_${AUDIENCE}_id`, {{ rider_id | tojson }});
+        localStorage.setItem(`busplus_${AUDIENCE}_name`, {{ rider_name | tojson }});
     } catch (e) { /* private mode */ }
 
     // Pass backend data to client
@@ -171,8 +174,6 @@
         audience: AUDIENCE,
         routes: {{ routes | tojson }},
         buses: {{ buses | tojson }},
-        preferred_route_id: {{ preferred_route_id | tojson }},
-        preferred_stop: {{ preferred_stop | tojson }},
         alert_lead_minutes: {{ alert_lead_minutes | int }}
     };
 
@@ -189,7 +190,6 @@
         if (backdrop) backdrop.classList.add("open");
         document.querySelector(".phone-map-app")?.classList.add("menu-open");
         if (iconBtn) {
-            iconBtn.classList.add("menu-open");
             iconBtn.setAttribute("aria-expanded", "true");
         }
     }
@@ -205,7 +205,6 @@
         if (backdrop) backdrop.classList.remove("open");
         document.querySelector(".phone-map-app")?.classList.remove("menu-open");
         if (iconBtn) {
-            iconBtn.classList.remove("menu-open");
             iconBtn.setAttribute("aria-expanded", "false");
         }
     }

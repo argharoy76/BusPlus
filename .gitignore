@@ -1,0 +1,31 @@
+# --- Secrets and server data: NEVER commit these ---
+.env
+instance/
+*.db
+*.sqlite3
+backups/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Other ---
+Claude outputs/
+*.log
+*.zip

@@ -124,10 +124,8 @@
                 hiddenDriverId.value = driver.driver_id;
                 suggestionsMenu.style.display = "none";
 
-                // Auto-select assigned route
-                if (driver.assigned_route_id) {
-                    routeSelect.value = driver.assigned_route_id;
-                }
+                // Auto-select the route of the driver's bus
+                if (driver.route_id) routeSelect.value = driver.route_id;
             });
             suggestionsMenu.appendChild(row);
         });

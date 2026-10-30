@@ -1,18 +1,10 @@
 {% extends "base.html" %}
+{# Sign-in page for students AND teachers (portal = "student" or "teacher"). #}
 
 {% block title %}{{ portal_info.label }} Login - BusPlus{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
-<style>
-    .fluid-question-label {
-        display: block;
-        font-size: 1rem;
-        font-weight: 700;
-        color: #0f172a;
-        margin-bottom: 0.45rem;
-    }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -33,7 +25,9 @@
         <div style="width: 44px;"></div>
     </div>
 
-    <!-- Student Questions Form -->
+    <div id="login-error-box" class="fluid-error-pill" role="alert"></div>
+
+    <!-- Name + ID form -->
     <form id="student-login-form" class="fluid-form-container" style="margin-top: 1.5rem;">
         <!-- Option 1: Student's Name -->
         <div class="fluid-input-wrap" style="margin-bottom: 1.25rem;">
@@ -65,6 +59,7 @@
     const form = document.getElementById("student-login-form");
     const inputName = document.getElementById("input-student-name");
     const inputId = document.getElementById("input-student-id");
+    const errorBox = document.getElementById("login-error-box");
 
     // Pre-populate if previously entered, without auto-redirecting
     try {
@@ -75,41 +70,36 @@
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const fullName = inputName.value.trim();
-        const studentId = inputId.value.trim();
-
-        if (!fullName || !studentId) {
-            alert("Please enter your name and ID.");
+        const riderId = inputId.value.trim();
+        if (!fullName || !riderId) {
+            showError("Please enter your name and ID.");
             return;
         }
-
         try {
-            const resp = await fetch(PORTAL === "teacher" ? "/api/auth/teacher/login" : "/api/auth/student/login", {
+            const resp = await fetch(`/api/auth/${PORTAL}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    student_id: studentId,
-                    teacher_id: studentId,
-                    full_name: fullName,
-                    preferred_route_id: "KU-R01",
-                    preferred_stop: "Malabotha More",
-                    alert_lead_minutes: 5
-                })
+                body: JSON.stringify({ full_name: fullName, [`${PORTAL}_id`]: riderId })
             });
-
             const data = await resp.json();
-            if (data.success) {
-                // Save locally so student remains logged in anytime they return
-                try {
-                    localStorage.setItem(KEY_ID, studentId);
-                    localStorage.setItem(KEY_NAME, fullName);
-                } catch (e) { /* private mode */ }
-                window.location.href = data.redirect_url || `/${PORTAL}/dashboard`;
-            } else {
-                alert(data.message || "Login failed");
+            if (!data.success) {
+                showError(data.message || "Login failed. Please try again.");
+                return;
             }
+            // Remember name and ID on this phone so the form is filled in next time
+            try {
+                localStorage.setItem(KEY_ID, riderId);
+                localStorage.setItem(KEY_NAME, fullName);
+            } catch (e) { /* private mode */ }
+            window.location.href = data.redirect_url;
         } catch (err) {
-            alert("Connection error: " + err.message);
+            showError("Connection error. Please check your internet and try again.");
         }
     });
+
+    function showError(message) {
+        errorBox.textContent = message;
+        errorBox.style.display = "block";
+    }
 </script>
 {% endblock %}

@@ -1,18 +1,10 @@
 """
-Khulna University BusPlus Models Package
+BusPlus data models.
+
+  records.py     database tables (Flask-SQLAlchemy)
+  route.py       BusRoute / BusStop used while the app runs
+  bus.py         Bus (setup + live position)
+  user.py        DriverUser (hashed PIN, one-phone lock)
+  seed_data.py   built-in routes/buses written to an empty database
+  route_paths.py road lines of the built-in routes
 """
-
-from .route import BusStop, BusRoute, get_predefined_khulna_university_routes
-from .bus import Bus, get_default_khulna_university_buses
-from .user import DriverUser, StudentUser, get_default_driver_accounts
-
-__all__ = [
-    "BusStop",
-    "BusRoute",
-    "get_predefined_khulna_university_routes",
-    "Bus",
-    "get_default_khulna_university_buses",
-    "DriverUser",
-    "StudentUser",
-    "get_default_driver_accounts"
-]

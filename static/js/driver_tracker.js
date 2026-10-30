@@ -1,11 +1,14 @@
-/**
- * Khulna University Bus Tracker (BusPlus)
- * Driver app: full-screen map, GPS on automatically, one bus icon with a menu
+/*
+ * BusPlus driver page: full-screen map, GPS on automatically, one bus icon with a menu.
  *   - "Your bus": only this driver's bus (and its route + trail)
  *   - "All buses": every route and every live bus (with their trails)
  *   - Today's duty: which bus to drive on which route (set daily by the admin)
+ *   - Online / Offline switch: start or stop sharing the bus's location
+ *
+ * Needs google_maps_helper.js (window.googleMapsHelper) loaded first.
  */
 
+/** The driver page: map, GPS sending, menu, duty notification and session handling. */
 class DriverApp {
     constructor() {
         const data = window.DRIVER_DATA || {};
@@ -17,6 +20,7 @@ class DriverApp {
         this.view = this.readSetting("busplus_driver_view", "mine"); // "mine" | "all"
         this.online = this.readSetting("busplus_driver_online", "1") === "1";   // driver's Online/Offline switch
         this.pendingFix = null;      // newest GPS fix waiting while the previous one is still being sent
+        this.pendingTimer = null;
         this.streamLive = false;
         this.follow = true;          // keep the own bus in view until the driver pans the map
         this.watchId = null;
@@ -27,6 +31,7 @@ class DriverApp {
         this.dutyTimer = null;
         this.duty = null;
         this.firstFit = true;
+        this.lastShownRoutes = null;
 
         this.el = {
             icon: document.getElementById("drv-icon"),
@@ -53,6 +58,7 @@ class DriverApp {
         };
     }
 
+    /** localStorage that never throws (private mode just means nothing is remembered). */
     readSetting(key, fallback) {
         try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
     }
@@ -61,14 +67,17 @@ class DriverApp {
         try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
     }
 
-    async init() {
+    init() {
         const helper = window.googleMapsHelper;
-        await helper.initMap("driver-map", {
+        // Driver map: nothing but the map and the bus icon (no layer buttons, no corner label)
+        helper.initMap("driver-map", {
             center: {
                 lat: this.bus.current_latitude || 22.8021,
                 lng: this.bus.current_longitude || 89.5340
             },
-            zoom: 14
+            zoom: 14,
+            layerSwitcher: false,
+            attribution: false
         });
 
         helper.drawRoutes(this.routes);
@@ -175,6 +184,7 @@ class DriverApp {
         return [...live];
     }
 
+    /** Puts the buses for the current view, their trails and route lines on the map. */
     drawBuses() {
         const helper = window.googleMapsHelper;
         const myId = this.bus.bus_id;
@@ -191,11 +201,10 @@ class DriverApp {
         helper.updateActiveBuses(list);
 
         // Make the driver's own bus stand out
-        const mine = helper.markers[myId];
-        const el = mine && mine.getElement ? mine.getElement() : null;
-        el?.querySelector(".gmap-bus-container")?.classList.add("is-mine");
+        helper.busMarkers[myId]?.getElement()?.querySelector(".gmap-bus-container")?.classList.add("is-mine");
     }
 
+    /** Live bus feed pushed by the server (the 3-second poll only runs while it is down). */
     startLiveStream() {
         if (!window.EventSource) return;
         const es = new EventSource("/api/buses/stream");
@@ -219,6 +228,7 @@ class DriverApp {
         }
     }
 
+    /** New bus list from the stream or the poll: redraw, and re-fit if the admin moved this bus to another route. */
     handleBuses(buses) {
         try {
             this.allBuses = buses;
@@ -285,6 +295,7 @@ class DriverApp {
         this.requestWakeLock();
     }
 
+    /** New GPS fix from the phone: sends it to the server, at most about once a second. */
     onPosition(pos) {
         if (!this.online) return;
         const { latitude, longitude, speed, heading } = pos.coords;
@@ -458,6 +469,7 @@ class DriverApp {
     // ------------------------------------------------------------------
     // Session
     // ------------------------------------------------------------------
+    /** POST JSON; a lost session (401/409) sends the driver back to the login page. Returns the reply or null. */
     async post(url, body) {
         try {
             const resp = await fetch(url, {

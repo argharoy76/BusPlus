@@ -1,0 +1,7 @@
+{# Map pages only: Leaflet (served from /static/vendor), our map helper, and the map's starting point. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script>
+    window.APP_CONFIG = { universityLocation: {{ map_center | tojson }} };
+</script>
+<script src="{{ url_for('static', filename='js/google_maps_helper.js') }}"></script>

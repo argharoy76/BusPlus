@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/driver.css') }}">
+{% include "_map_assets.html" %}
 {% endblock %}
 
 {% block content %}
@@ -100,7 +101,7 @@
 {% block extra_js %}
 <script>
     window.DRIVER_DATA = {
-        driver: {{ {"driver_id": driver.driver_id, "full_name": driver.full_name} | tojson }},
+        driver: {{ driver | tojson }},
         bus: {{ bus | tojson }},
         routes: {{ routes | tojson }}
     };

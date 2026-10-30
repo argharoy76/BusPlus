@@ -1,6 +1,8 @@
 /*
- * Khulna University Bus Tracker (BusPlus)
- * Driver app: full-screen map with a single bus icon
+ * BusPlus driver page (templates/driver_dashboard.html).
+ * Full-screen map with a single bus icon in the corner; tapping it opens the menu
+ * (today's duty, Your bus / All buses, Online switch, Log out).
+ * A banner at the bottom explains GPS problems.
  */
 
 :root {
@@ -12,17 +14,15 @@
 }
 
 * {
-    box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
 }
 
+/* The page never scrolls: the map fills the screen */
 body {
-    margin: 0;
     width: 100vw;
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: #e2e8f0;
 }
 
@@ -42,7 +42,7 @@ button {
     z-index: 1;
 }
 
-/* Generic line icon */
+/* Generic line icon (inline SVG drawn with the text colour) */
 .drv-ico {
     width: 20px;
     height: 20px;
@@ -59,7 +59,13 @@ button {
     stroke: none;
 }
 
-/* ---- The bus icon (top left) ---- */
+/* The driver's own bus on the map is a little bigger */
+.gmap-bus-container.is-mine .gmap-bus-body {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 6px 16px rgba(15, 23, 42, 0.35);
+}
+
+/* ---- The bus icon (top left): opens the menu ---- */
 .drv-icon-btn {
     position: absolute;
     top: 14px;
@@ -92,7 +98,7 @@ button {
     box-shadow: 0 0 0 4px rgba(8, 102, 255, 0.2), 0 6px 18px rgba(8, 102, 255, 0.35);
 }
 
-/* GPS state shown on the icon: green = sending, amber = starting, red = off */
+/* GPS state dot on the icon: amber = starting, green = sending, red = problem, grey = offline */
 .drv-gps-dot {
     position: absolute;
     right: -3px;
@@ -113,12 +119,16 @@ button {
     background: #ef4444;
 }
 
+.drv-gps-dot.off-duty {
+    background: #94a3b8;
+}
+
 @keyframes drvPulse {
     0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
     100% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
 }
 
-/* New duty notification */
+/* Red dot on the icon: a new duty the driver hasn't seen yet */
 .drv-unseen-dot {
     position: absolute;
     top: -3px;
@@ -134,7 +144,9 @@ button {
     display: none;
 }
 
-/* ---- Menu ---- */
+/* ---- Menu (drops down under the icon) ---- */
+
+/* Light dim behind the menu; tap it to close */
 .drv-backdrop {
     position: fixed;
     inset: 0;
@@ -179,6 +191,7 @@ button {
     transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.16s ease, visibility 0s;
 }
 
+/* Menu header: "BusPlus" and the driver ID */
 .drv-menu-head {
     display: flex;
     align-items: baseline;
@@ -202,7 +215,7 @@ button {
     color: #1e40af;
 }
 
-/* Today's duty card */
+/* Today's duty card (orange border while unseen: .is-new) */
 .drv-duty {
     margin: 12px;
     padding: 14px;
@@ -237,6 +250,7 @@ button {
     color: var(--drv-muted);
 }
 
+/* "Changed today" badge and note */
 .drv-duty-badge {
     flex-shrink: 0;
     font-size: 0.72rem;
@@ -245,11 +259,6 @@ button {
     background: #ffedd5;
     border-radius: 999px;
     padding: 3px 9px;
-}
-
-.drv-duty-badge[hidden],
-.drv-duty-changed[hidden] {
-    display: none;
 }
 
 .drv-duty-changed {
@@ -262,6 +271,12 @@ button {
     font-weight: 700;
 }
 
+.drv-duty-badge[hidden],
+.drv-duty-changed[hidden] {
+    display: none;
+}
+
+/* "Your bus" / "Your route" rows: coloured icon + name + details */
 .drv-duty-item {
     padding: 10px 0;
     border-top: 1px solid #f1f5f9;
@@ -282,6 +297,7 @@ button {
     gap: 12px;
 }
 
+/* --duty-color is the bus / route colour, set by the script */
 .drv-duty-icon {
     width: 42px;
     height: 42px;
@@ -323,7 +339,7 @@ button {
     color: #475569;
 }
 
-/* Your bus / All buses */
+/* Your bus / All buses toggle */
 .drv-views {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -355,130 +371,7 @@ button {
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
 }
 
-.drv-gps-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin: 0 16px 10px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--drv-muted);
-}
-
-.drv-gps-state.on { color: #059669; }
-.drv-gps-state.off { color: #dc2626; }
-
-.drv-gps-retry {
-    border: 1px solid #bfdbfe;
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: 0.75rem;
-    font-weight: 800;
-    cursor: pointer;
-}
-
-.drv-gps-retry[hidden] {
-    display: none;
-}
-
-.drv-logout {
-    display: block;
-    width: calc(100% - 24px);
-    margin: 0 12px 12px;
-    padding: 11px;
-    border-radius: 12px;
-    border: 1px solid #fecaca;
-    background: #fef2f2;
-    color: #dc2626;
-    font-size: 0.88rem;
-    font-weight: 800;
-    cursor: pointer;
-}
-
-/* GPS problem banner */
-.drv-banner {
-    position: absolute;
-    left: 14px;
-    right: 14px;
-    bottom: calc(18px + env(safe-area-inset-bottom));
-    z-index: 90;
-    max-width: 520px;
-    margin: 0 auto;
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: #0f172a;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    line-height: 1.4;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
-}
-
-.drv-banner[hidden] {
-    display: none;
-}
-
-/* Map pieces */
-.gmap-layer-selector {
-    display: none !important;   /* driver map: nothing but the map and the bus icon */
-}
-
-.gmap-dest-marker-wrap {
-    background: transparent;
-    border: none;
-}
-
-.gmap-dest-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px 4px 6px;
-    border-radius: 999px;
-    background: #0f172a;
-    color: #ffffff;
-    font-size: 11px;
-    font-weight: 800;
-    white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
-    border: 2px solid #ffffff;
-}
-
-.gmap-bus-container .gmap-bus-body {
-    background: var(--bus-color, #0866ff);
-    font-size: 0;
-}
-
-.gmap-bus-container .gmap-bus-pulse-ring {
-    border-color: var(--bus-color, #0866ff);
-}
-
-.gmap-bus-container .gmap-bus-heading-arrow {
-    border-bottom-color: var(--bus-color, #0866ff);
-}
-
-/* The driver's own bus is a little bigger */
-.gmap-bus-container.is-mine .gmap-bus-body {
-    transform: scale(1.15);
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 6px 16px rgba(15, 23, 42, 0.35);
-}
-
-.leaflet-control-attribution,
-.gmap-attrib-pill {
-    display: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .drv-menu, .drv-menu.open, .drv-gps-dot.on {
-        transition: none;
-        animation: none;
-    }
-}
-
-
-/* ---- Online / Offline switch ---- */
+/* Online / Offline row: status text, "Try again" (GPS problem only) and the switch */
 .drv-online-row {
     display: flex;
     align-items: center;
@@ -505,15 +398,33 @@ button {
     color: #475569;
 }
 
-.drv-online-row .drv-gps-state {
+.drv-gps-state {
     display: block;
     margin-top: 2px;
     font-size: 0.78rem;
     font-weight: 600;
 }
 
+.drv-gps-state.on { color: #059669; }
+.drv-gps-state.off { color: #dc2626; }
 .drv-gps-state.off-duty { color: var(--drv-muted); }
 
+.drv-gps-retry {
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.drv-gps-retry[hidden] {
+    display: none;
+}
+
+/* On/off switch (green and knob on the right = online) */
 .drv-switch {
     position: relative;
     flex-shrink: 0;
@@ -551,13 +462,53 @@ button {
     outline-offset: 2px;
 }
 
-/* Offline: grey dot on the bus icon */
-.drv-gps-dot.off-duty {
-    background: #94a3b8;
-    animation: none;
+.drv-logout {
+    display: block;
+    width: calc(100% - 24px);
+    margin: 0 12px 12px;
+    padding: 11px;
+    border-radius: 12px;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #dc2626;
+    font-size: 0.88rem;
+    font-weight: 800;
+    cursor: pointer;
 }
 
-/* Wider screens: a roomier menu */
+/* ---- GPS problem banner (bottom of the screen) ---- */
+.drv-banner {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 90;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.4;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
+}
+
+.drv-banner[hidden] {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .drv-menu,
+    .drv-menu.open,
+    .drv-gps-dot.on {
+        transition: none;
+        animation: none;
+    }
+}
+
+/* Wider screens: a roomier menu, banner in the bottom-right corner */
 @media (min-width: 900px) {
     .drv-icon-btn { top: 18px; left: 18px; }
     .drv-menu { top: 82px; left: 18px; width: 340px; }

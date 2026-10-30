@@ -1,85 +1,171 @@
 """
-Khulna University Bus Tracker (BusPlus)
-Application Configuration & Constant Settings
+BusPlus settings.
+
+Everything that changes between your computer and the live server is read from
+environment variables. On the server they live in a `.env` file next to this one
+(copy `.env.example` to `.env` and fill it in). `.env` is never committed to Git.
+
+Settings that are the same everywhere (the university, the final stop of every
+route, timings) are plain constants at the bottom of the `Config` class.
 """
 
 import os
 import secrets
+from datetime import timedelta
+from pathlib import Path
 
-INSTANCE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance")
-ADMIN_PASSWORD_FILE = os.path.join(INSTANCE_DIR, "admin_password.txt")
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+INSTANCE_DIR = BASE_DIR / "instance"          # database + local secrets (ignored by Git)
+INSTANCE_DIR.mkdir(exist_ok=True)
+
+# Read KEY=value lines from .env into the environment (real environment variables win).
+load_dotenv(BASE_DIR / ".env")
 
 
-def _load_admin_password() -> str:
+def env_bool(name: str, default: bool = False) -> bool:
+    """Read an on/off environment variable such as `true`, `1`, `yes`, `false`, `0`."""
+    value = os.environ.get(name)
+    if value is None or value.strip() == "":
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _local_secret(file_name: str, length: int = 32) -> str:
     """
-    Admin password for the /backend panel:
-      1. BUSPLUS_ADMIN_PASSWORD environment variable, if set
-      2. otherwise instance/admin_password.txt (created once with a random password)
+    Development helper: return a random secret kept in instance/<file_name>.
+
+    The first call creates the file, later calls reuse it, so sessions and the
+    admin password survive restarts on your own computer. Production never uses
+    this - it must set real values in `.env` (checked in `Config.check_production`).
     """
-    from_env = os.environ.get("BUSPLUS_ADMIN_PASSWORD", "").strip()
-    if from_env:
-        return from_env
-    try:
-        with open(ADMIN_PASSWORD_FILE, encoding="utf-8") as fh:
-            saved = fh.read().strip()
-            if saved:
-                return saved
-    except FileNotFoundError:
-        pass
-    generated = secrets.token_urlsafe(9)
-    os.makedirs(INSTANCE_DIR, exist_ok=True)
-    with open(ADMIN_PASSWORD_FILE, "w", encoding="utf-8") as fh:
-        fh.write(generated + "\n")
-    return generated
+    path = INSTANCE_DIR / file_name
+    if path.exists():
+        saved = path.read_text(encoding="utf-8").strip()
+        if saved:
+            return saved
+    value = secrets.token_urlsafe(length)
+    path.write_text(value + "\n", encoding="utf-8")
+    return value
 
 
-class AppConfig:
-    # Flask settings
-    SECRET_KEY = os.environ.get("SECRET_KEY", "khulna_university_busplus_secret_2026")
-    DEBUG = os.environ.get("FLASK_DEBUG", "True").lower() in ("true", "1", "yes")
-    PORT = int(os.environ.get("PORT", 5000))
-    HOST = os.environ.get("HOST", "0.0.0.0")
+class Config:
+    """Flask settings and BusPlus constants. `create_app()` loads this class."""
 
-    # Backend admin panel login (drivers and students can't sign in here)
-    ADMIN_USERNAME = os.environ.get("BUSPLUS_ADMIN_USERNAME", "admin")
-    ADMIN_PASSWORD = _load_admin_password()
+    # ------------------------------------------------------------------
+    # Environment
+    # ------------------------------------------------------------------
+    # "production" on the live server, "development" on your computer.
+    ENV_NAME = os.environ.get("BUSPLUS_ENV", "development").strip().lower()
+    IS_PRODUCTION = ENV_NAME == "production"
+    DEBUG = env_bool("FLASK_DEBUG", False) and not IS_PRODUCTION
+    TESTING = False
 
-    # A driver account stays locked to one device while in use. If that device
-    # goes quiet (no login / GPS update) for this long, the driver can sign in again elsewhere.
-    DRIVER_SESSION_TIMEOUT_MINUTES = 10
+    # Where `python app.py` listens (production uses gunicorn instead, see gunicorn.conf.py).
+    HOST = os.environ.get("HOST", "127.0.0.1")
+    PORT = int(os.environ.get("PORT", "5000"))
 
-    # Local time for "today" (driver duty notifications). Bangladesh has no daylight saving.
-    LOCAL_UTC_OFFSET_HOURS = 6
+    # ------------------------------------------------------------------
+    # Security
+    # ------------------------------------------------------------------
+    # Signs the session cookie. Must be a long random value in production.
+    SECRET_KEY = os.environ.get("SECRET_KEY") or (None if IS_PRODUCTION else _local_secret("secret_key.txt"))
 
-    # University Information
+    # Backend (/backend) admin login.
+    ADMIN_USERNAME = os.environ.get("BUSPLUS_ADMIN_USERNAME", "admin").strip() or "admin"
+    ADMIN_PASSWORD = os.environ.get("BUSPLUS_ADMIN_PASSWORD") or (
+        None if IS_PRODUCTION else _local_secret("admin_password.txt", 9)
+    )
+
+    # Session cookie: not readable by JavaScript, not sent by other sites, HTTPS-only in production.
+    SESSION_COOKIE_NAME = "busplus_session"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = IS_PRODUCTION
+    PERMANENT_SESSION_LIFETIME = timedelta(days=180)   # students/teachers stay signed in
+
+    # Flask-WTF CSRF protection: every POST/PUT/DELETE must carry the page's token.
+    # No time limit, because a driver's map page stays open for a whole shift.
+    WTF_CSRF_TIME_LIMIT = None
+    WTF_CSRF_SSL_STRICT = IS_PRODUCTION
+
+    # Flask-Limiter: login attempt limits are kept in memory (one server process).
+    RATELIMIT_STORAGE_URI = "memory://"
+    RATELIMIT_HEADERS_ENABLED = True
+
+    # Flask-Talisman: redirect http:// to https:// in production (nginx terminates HTTPS).
+    FORCE_HTTPS = env_bool("FORCE_HTTPS", IS_PRODUCTION)
+
+    # How many reverse proxies (nginx) sit in front of the app. Lets Flask see the
+    # visitor's real IP and https scheme. Use 0 when nothing is in front.
+    TRUSTED_PROXIES = int(os.environ.get("TRUSTED_PROXIES", "1" if IS_PRODUCTION else "0"))
+
+    # Largest request body accepted (a long route line is the biggest thing we receive).
+    MAX_CONTENT_LENGTH = 2 * 1024 * 1024
+
+    # ------------------------------------------------------------------
+    # Database (Flask-SQLAlchemy). SQLite file in instance/ unless DATABASE_URL is set.
+    # ------------------------------------------------------------------
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or f"sqlite:///{INSTANCE_DIR / 'busplus.db'}"
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # On first start with an empty database, also create 4 demo drivers (PIN 1234).
+    # Handy on your computer; keep it off on the live server.
+    SEED_DEMO_DRIVERS = env_bool("BUSPLUS_DEMO_DRIVERS", not IS_PRODUCTION)
+
+    # ------------------------------------------------------------------
+    # BusPlus constants
+    # ------------------------------------------------------------------
     UNIVERSITY_NAME = "Khulna University"
-    UNIVERSITY_SHORT_NAME = "KU"
-    UNIVERSITY_LOCATION = {
-        "name": "Khulna University Main Campus",
-        "latitude": 22.8010,
-        "longitude": 89.5345,
-        "address": "Sher-e-Bangla Rd, Gollamari, Khulna 9208, Bangladesh"
-    }
 
-    # Final destination of EVERY KU bus route (KU Hadi Chattar).
-    # All routes end here; change it in one place to move the end point for all buses.
+    # Map centre used before any bus or home is known.
+    UNIVERSITY_LOCATION = {"latitude": 22.8010, "longitude": 89.5345}
+
+    # Every route ends here. Change it once to move the end point for all buses.
     FINAL_DESTINATION = {
         "stop_name": "Hadi Chattar",
         "latitude": 22.80209,
         "longitude": 89.53398,
-        "landmark_hint": "Khulna University · Hadi Chattar"
+        "landmark_hint": "Khulna University · Hadi Chattar",
     }
 
-    # Google Maps API Configuration
-    # Defaults to empty string or environment variable.
-    # Users can set GOOGLE_MAPS_API_KEY environment variable or enter it directly in the UI.
-    GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    # Local time zone ("today" for driver duties, arrival clock times).
+    TIMEZONE = "Asia/Dhaka"
 
-    # Default Notification Threshold (in minutes)
-    DEFAULT_ALERT_MINUTES_THRESHOLD = 5
+    # A driver account is locked to one phone while in use. If that phone is quiet
+    # for this long, the driver may sign in on another phone.
+    DRIVER_SESSION_TIMEOUT_MINUTES = 10
 
-    # Average Bus Speed in City Traffic (km/h) for fallback ETA calculations
-    AVERAGE_BUS_SPEED_KMH = 26.0
+    # Default "notify me N minutes before the bus arrives".
+    DEFAULT_ALERT_MINUTES = 5
 
-    # Default Refresh Interval for student client polling in milliseconds
-    POLLING_INTERVAL_MS = 3000
+    # Road router used by the route editor to snap a route to real roads (OpenStreetMap data).
+    ROAD_ROUTER_URL = os.environ.get("ROAD_ROUTER_URL", "https://router.project-osrm.org/route/v1/driving/")
+
+    @classmethod
+    def check_production(cls) -> None:
+        """Stop the server from starting in production with missing or weak secrets."""
+        if not cls.IS_PRODUCTION:
+            return
+        problems = []
+        if not cls.SECRET_KEY or len(cls.SECRET_KEY) < 32:
+            problems.append("SECRET_KEY must be set to a random value of at least 32 characters.")
+        if not cls.ADMIN_PASSWORD or len(cls.ADMIN_PASSWORD) < 10:
+            problems.append("BUSPLUS_ADMIN_PASSWORD must be set (at least 10 characters).")
+        if problems:
+            raise RuntimeError("BusPlus is not configured for production:\n  - " + "\n  - ".join(problems))
+
+
+class TestConfig(Config):
+    """Settings for the automated tests: throw-away in-memory database, no CSRF/HTTPS checks."""
+
+    TESTING = True
+    SECRET_KEY = "test-secret-key"
+    ADMIN_PASSWORD = "test-admin-password"
+    SQLALCHEMY_DATABASE_URI = "sqlite://"
+    SEED_DEMO_DRIVERS = True
+    WTF_CSRF_ENABLED = False
+    FORCE_HTTPS = False
+    RATELIMIT_ENABLED = False
+    SESSION_COOKIE_SECURE = False

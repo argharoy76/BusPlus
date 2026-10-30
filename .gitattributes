@@ -1,0 +1,5 @@
+# Keep Linux line endings in files the server runs, even when edited on Windows.
+* text=auto eol=lf
+*.png binary
+*.woff2 binary
+*.ico binary

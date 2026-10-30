@@ -1,0 +1,4 @@
+# Extra tools for development and the GitHub checks: pip install -r requirements-dev.txt
+-r requirements.txt
+pytest==9.1.1
+ruff==0.16.9

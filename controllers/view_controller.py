@@ -1,121 +1,124 @@
 """
-Khulna University Bus Tracker (BusPlus)
-View Controller (Page Renderers)
+The front-end pages (HTML).
+
+  /                      start page: Driver, Student or Teacher
+  /driver/login          driver sign-in
+  /driver/dashboard      driver's full-screen map (signed-in driver only)
+  /student/login         student sign-in
+  /student/dashboard     student live map (student buses only)
+  /teacher/login         teacher sign-in
+  /teacher/dashboard     teacher live map (teacher buses only)
 """
 
-from flask import Blueprint, render_template, session, redirect, url_for
-from config import AppConfig
-from services.tracking_service import TrackingService
-from services.user_service import UserService
+from flask import Blueprint, redirect, render_template, session, url_for
 
-view_bp = Blueprint("view_bp", __name__)
-tracking_service = TrackingService()
-user_service = UserService()
+from config import Config
+from extensions import talisman
+from services import tracking, users
 
-@view_bp.route("/", methods=["GET"])
-def landing_page():
-    """Renders the launching page."""
-    routes = tracking_service.get_all_routes()
-    buses = tracking_service.get_all_buses()
-    student_logged_in = (session.get("role") == "student" and bool(session.get("student_id")))
-    return render_template(
-        "landing.html",
-        routes=routes,
-        buses=buses,
-        student_logged_in=student_logged_in,
-        university_name=AppConfig.UNIVERSITY_NAME,
-        university_short_name=AppConfig.UNIVERSITY_SHORT_NAME,
-        google_maps_api_key=AppConfig.GOOGLE_MAPS_API_KEY
-    )
+view_bp = Blueprint("views", __name__)
 
-
-@view_bp.route("/driver/login", methods=["GET"])
-def driver_login_page():
-    """Renders driver authentication page."""
-    if session.get("role") == "driver" and session.get("driver_id"):
-        driver = user_service.get_driver_by_id(session["driver_id"])
-        if driver and driver.is_logged_in and driver.current_session_token == session.get("session_token"):
-            return redirect(url_for("view_bp.driver_dashboard_page"))
-    buses = tracking_service.get_all_buses()
-    return render_template(
-        "driver_login.html",
-        buses=buses,
-        routes=tracking_service.get_all_routes(),
-        google_maps_api_key=AppConfig.GOOGLE_MAPS_API_KEY
-    )
-
-
-@view_bp.route("/driver/dashboard", methods=["GET"])
-def driver_dashboard_page():
-    """Driver's full-screen map. Only a signed-in driver can open it."""
-    if session.get("role") != "driver" or not session.get("driver_id"):
-        return redirect(url_for("view_bp.driver_login_page"))
-
-    driver = user_service.get_driver_by_id(session["driver_id"])
-    if not driver or not driver.is_logged_in or driver.current_session_token != session.get("session_token"):
-        # Account was unlocked by the admin or taken over by another device
-        session.pop("role", None)
-        session.pop("driver_id", None)
-        return redirect(url_for("view_bp.driver_login_page"))
-
-    bus = tracking_service.get_bus_by_id(driver.assigned_bus_id)
-    return render_template(
-        "driver_dashboard.html",
-        driver=driver.to_dict(),
-        bus=bus.to_dict() if bus else {},
-        routes=tracking_service.get_all_routes(),
-        google_maps_api_key=AppConfig.GOOGLE_MAPS_API_KEY,
-        university_location=AppConfig.UNIVERSITY_LOCATION
-    )
-
-
+# Wording for the shared student/teacher pages.
 PORTALS = {
-    "student": {"label": "Student", "id_label": "Student ID", "accent": "emerald"},
-    "teacher": {"label": "Teacher", "id_label": "Teacher ID", "accent": "violet"},
+    "student": {"label": "Student", "id_label": "Student ID"},
+    "teacher": {"label": "Teacher", "id_label": "Teacher ID"},
 }
 
 
-@view_bp.route("/student/login", methods=["GET"])
-def student_login_page():
-    """Student sign-in: name + student ID."""
-    return render_template("student_login.html", portal="student", portal_info=PORTALS["student"],
-                           google_maps_api_key=AppConfig.GOOGLE_MAPS_API_KEY)
+@view_bp.get("/")
+def landing():
+    """Start page with the Driver, Student and Teacher buttons."""
+    return render_template("landing.html")
 
 
-@view_bp.route("/teacher/login", methods=["GET"])
-def teacher_login_page():
-    """Teacher sign-in: name + teacher ID."""
-    return render_template("student_login.html", portal="teacher", portal_info=PORTALS["teacher"],
-                           google_maps_api_key=AppConfig.GOOGLE_MAPS_API_KEY)
+@view_bp.get("/health")
+@talisman(force_https=False)          # local health checks use plain http
+def health():
+    """Used by the deploy script and uptime monitors to check the app is running."""
+    return {"status": "ok"}
 
 
-def _rider_dashboard(audience: str, rider_id: str, rider_name: str):
-    """Live map for students or teachers. Each only sees the buses meant for them."""
+# ---------------------------------------------------------------------------
+# Driver
+# ---------------------------------------------------------------------------
+def _signed_in_driver():
+    """The driver signed in on this phone, or None (also None if another phone took over)."""
+    if session.get("role") != "driver":
+        return None
+    driver = users.get_driver(session.get("driver_id"))
+    if driver is None or driver.session_token != session.get("session_token"):
+        return None
+    return driver
+
+
+@view_bp.get("/driver/login")
+def driver_login():
+    """Driver sign-in page (a driver who is still signed in goes straight to the map)."""
+    if _signed_in_driver():
+        return redirect(url_for("views.driver_dashboard"))
+    return render_template("driver_login.html", routes=tracking.all_routes())
+
+
+@view_bp.get("/driver/dashboard")
+def driver_dashboard():
+    """The driver's full-screen map. Sends anyone else back to the sign-in page."""
+    driver = _signed_in_driver()
+    if driver is None:
+        session.pop("role", None)
+        session.pop("driver_id", None)
+        return redirect(url_for("views.driver_login"))
+    bus = tracking.get_bus(driver.assigned_bus_id)
     return render_template(
-        "student_dashboard.html",
-        audience=audience,
-        portal_info=PORTALS[audience],
-        routes=tracking_service.get_all_routes(),
-        buses=tracking_service.get_all_buses(audience),
-        student_name=rider_name,
-        student_id=rider_id,
-        preferred_stop=session.get("preferred_stop", "Malabotha More"),
-        preferred_route_id=session.get("preferred_route_id", "KU-R01"),
-        alert_lead_minutes=session.get("alert_lead_minutes", 5),
-        google_maps_api_key=AppConfig.GOOGLE_MAPS_API_KEY,
-        university_location=AppConfig.UNIVERSITY_LOCATION
+        "driver_dashboard.html",
+        driver={"driver_id": driver.driver_id, "full_name": driver.full_name},
+        bus=bus.to_dict() if bus else {},
+        routes=tracking.all_routes(),
+        map_center=Config.UNIVERSITY_LOCATION,
     )
 
 
-@view_bp.route("/student/dashboard", methods=["GET"])
-def student_dashboard_page():
-    """Student live map: student buses only."""
-    return _rider_dashboard("student", session.get("student_id", "KU-2026-Guest"), session.get("student_name", "Student"))
+# ---------------------------------------------------------------------------
+# Students and teachers
+# ---------------------------------------------------------------------------
+def _rider_login_page(audience: str):
+    return render_template("student_login.html", portal=audience, portal_info=PORTALS[audience])
 
 
-@view_bp.route("/teacher/dashboard", methods=["GET"])
-def teacher_dashboard_page():
-    """Teacher live map: teacher buses only. Teachers sign in first."""
-    if session.get("role") != "teacher" or not session.get("teacher_id"):
-        return redirect(url_for("view_bp.teacher_login_page"))
-    return _rider_dashboard("teacher", session["teacher_id"], session.get("teacher_name", "Teacher"))
+def _rider_dashboard(audience: str):
+    """Live map for a signed-in student or teacher; each only sees the buses meant for them."""
+    if session.get("role") != audience or not session.get("rider_id"):
+        return redirect(url_for(f"views.{audience}_login"))
+    return render_template(
+        "student_dashboard.html",
+        audience=audience,
+        rider_id=session["rider_id"],
+        rider_name=session.get("rider_name", PORTALS[audience]["label"]),
+        routes=tracking.all_routes(),
+        buses=tracking.all_buses(audience),
+        alert_lead_minutes=Config.DEFAULT_ALERT_MINUTES,
+        map_center=Config.UNIVERSITY_LOCATION,
+    )
+
+
+@view_bp.get("/student/login")
+def student_login():
+    """Student sign-in page."""
+    return _rider_login_page("student")
+
+
+@view_bp.get("/teacher/login")
+def teacher_login():
+    """Teacher sign-in page."""
+    return _rider_login_page("teacher")
+
+
+@view_bp.get("/student/dashboard")
+def student_dashboard():
+    """Live map with the student buses."""
+    return _rider_dashboard("student")
+
+
+@view_bp.get("/teacher/dashboard")
+def teacher_dashboard():
+    """Live map with the teacher buses."""
+    return _rider_dashboard("teacher")

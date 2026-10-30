@@ -1,0 +1,61 @@
+# Runs on every push and pull request:
+#   1. checks the code (ruff) and runs the tests (pytest)
+#   2. on a push to main, if the tests pass AND the VPS secrets are set,
+#      logs in to the Hostinger VPS and runs deploy/update.sh
+# Set the secrets VPS_HOST, VPS_USER, VPS_SSH_KEY (and optionally VPS_PORT)
+# as shown in DEPLOYMENT.md. Without them, step 2 is simply skipped.
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install libraries
+        run: pip install -r requirements-dev.txt
+      - name: Check code style
+        run: ruff check .
+      - name: Run tests
+        run: pytest
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Skip (no VPS secrets yet)
+        if: env.VPS_HOST == ''
+        run: echo "VPS_HOST is not set - skipping deploy. See DEPLOYMENT.md."
+      - name: Deploy to the Hostinger VPS
+        if: env.VPS_HOST != ''
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # The key on the server is locked to deploy/update.sh, so no command is sent.
+          ssh -T -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST"
