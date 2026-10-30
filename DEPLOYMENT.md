@@ -77,7 +77,7 @@ git push
 
 GitHub then does three things:
 
-1. Runs the code checks and the 30 tests.
+1. Runs the code checks and the tests.
 2. If they pass, logs in to the VPS and runs `deploy/update.sh`, which:
    - gets the new code
    - installs any new libraries

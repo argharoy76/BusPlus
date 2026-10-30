@@ -6,7 +6,6 @@
 
 :root {
     --primary-blue-gradient: linear-gradient(135deg, #0866ff 0%, #1877f2 50%, #0052cc 100%);
-    --accent-emerald-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);  /* student "See Map" button */
     --text-dark: #0f172a;
 }
 
@@ -193,7 +192,7 @@ body {
     border: 1px solid rgba(8, 102, 255, 0.15);
 }
 
-/* Landing: Driver / Student / Teacher buttons */
+/* Landing: Driver button + one button per rider type */
 .fluid-actions-stack {
     display: flex;
     flex-direction: column;
@@ -250,19 +249,17 @@ body {
     100% { left: 140%; }
 }
 
-.fluid-touch-btn.btn-driver {
-    background: linear-gradient(135deg, #0866ff 0%, #1d4ed8 100%);
-    box-shadow: 0 12px 28px -6px rgba(8, 102, 255, 0.38);
+/* Each button's colour comes from content/user_types.py through --btn-color */
+.fluid-touch-btn {
+    --btn-color: #0866ff;
+    background: linear-gradient(135deg, var(--btn-color) 0%, color-mix(in srgb, var(--btn-color) 78%, #000) 100%);
+    box-shadow: 0 12px 28px -6px color-mix(in srgb, var(--btn-color) 38%, transparent);
 }
 
-.fluid-touch-btn.btn-student {
-    background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.35);
-}
-
-.fluid-touch-btn.btn-teacher {
-    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-    box-shadow: 0 12px 28px -6px rgba(124, 58, 237, 0.35);
+.btn-label {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
 .btn-icon-wrapper {
@@ -514,4 +511,10 @@ body {
     font-weight: 700;
     color: #0f172a;
     margin-bottom: 0.45rem;
+}
+
+/* "See Map" button on the rider sign-in page, coloured like that rider type's start-page button */
+.rider-submit-btn {
+    background: linear-gradient(135deg, var(--btn-color) 0%, color-mix(in srgb, var(--btn-color) 78%, #000) 100%);
+    box-shadow: 0 12px 28px -6px color-mix(in srgb, var(--btn-color) 40%, transparent);
 }

@@ -13,6 +13,7 @@ import re
 from flask import Blueprint, redirect, render_template, request, session, url_for
 
 from config import Config
+from content import rules
 from controllers.helpers import fail, json_body, ok
 from services import store, tracking, users
 from services.road_router import RoadRouterError, road_path
@@ -20,8 +21,8 @@ from services.tracking_service import BUS_COLOR_PALETTE
 
 admin_bp = Blueprint("admin", __name__)
 
-PIN_RE = re.compile(r"^\d{4,8}$")
-TEST_DRIVE_SPEED = 2.0      # test drives run at twice the normal simulated speed
+PIN_RE = re.compile(rf"^\d{{{rules.PIN_MIN_DIGITS},{rules.PIN_MAX_DIGITS}}}$")   # PIN length: content/rules.py
+TEST_DRIVE_SPEED = rules.TEST_DRIVE_SPEED
 
 
 @admin_bp.before_request
@@ -54,6 +55,8 @@ def portal():
         final_destination=Config.FINAL_DESTINATION,
         bus_color_palette=BUS_COLOR_PALETTE,
         admin_username=Config.ADMIN_USERNAME,
+        default_bus_seats=rules.DEFAULT_BUS_SEATS,
+        max_bus_seats=rules.MAX_BUS_SEATS,
     )
 
 
@@ -78,7 +81,7 @@ def _clean_driver_form(data: dict, creating: bool, driver_id: str | None = None)
     pin = str(data.get("pin") or "").strip()
     if creating or pin:
         if not PIN_RE.match(pin):
-            return {}, "PIN must be 4 to 8 digits."
+            return {}, f"PIN must be {rules.PIN_MIN_DIGITS} to {rules.PIN_MAX_DIGITS} digits."
         clean["pin"] = pin
     if creating or "assigned_bus_id" in data:
         bus_id = str(data.get("assigned_bus_id") or "").strip()

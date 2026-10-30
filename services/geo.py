@@ -10,6 +10,7 @@ from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from config import Config
+from content.map_settings import COUNTRY_BOUNDS
 
 EARTH_RADIUS_KM = 6371.0088          # mean Earth radius
 ROAD_FACTOR = 1.25                   # roads bend: real road distance ≈ straight line × 1.25
@@ -17,8 +18,8 @@ CITY_BUS_SPEED_KMH = 24.0            # typical bus speed in Khulna traffic
 DWELL_MINUTES_PER_STOP = 1.5         # time lost at each stop on the way
 LOCAL_TZ = ZoneInfo(Config.TIMEZONE)
 
-# Rough box around Bangladesh, used to reject positions that are obviously wrong.
-BANGLADESH_BOUNDS = {"lat": (20.0, 27.0), "lng": (88.0, 93.0)}
+# Rough box around Bangladesh (content/map_settings.py), used to reject positions that are obviously wrong.
+BANGLADESH_BOUNDS = COUNTRY_BOUNDS
 
 
 def distance_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

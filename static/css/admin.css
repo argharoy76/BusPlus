@@ -319,8 +319,12 @@
     height: 34px; padding: 0 8px; border-radius: 999px; border: 1.5px solid #e2e8f0;
     font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
 }
-.inline-audience-select.audience-student { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
-.inline-audience-select.audience-teacher { background: #f5f3ff; border-color: #ddd6fe; color: #6d28d9; }
+/* Coloured like the rider type (content/user_types.py) through --aud-color */
+.inline-audience-select {
+    color: var(--aud-color, #334155);
+    border-color: color-mix(in srgb, var(--aud-color, #94a3b8) 40%, #fff);
+    background: color-mix(in srgb, var(--aud-color, #94a3b8) 8%, #fff);
+}
 .audience-choice { display: flex; gap: 0.5rem; }
 .audience-choice label {
     flex: 1; display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem;

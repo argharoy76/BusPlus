@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BusPlus Backend</title>
+    <title>{{ site.APP_NAME }} Backend</title>
     
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
@@ -27,7 +27,7 @@
                         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>
                     </div>
                     <div>
-                        <div style="font-weight:800; font-size:1.05rem; color:#0f172a;">BusPlus</div>
+                        <div style="font-weight:800; font-size:1.05rem; color:#0f172a;">{{ site.APP_NAME }}</div>
                         <div style="font-size:0.75rem; color:#64748b;">Backend</div>
                     </div>
                 </div>
@@ -42,7 +42,7 @@
 
             <div class="sidebar-foot">
                 <div class="signed-in-as">Signed in as <b>{{ admin_username }}</b></div>
-                <a href="/" class="admin-nav-item" style="color:#64748b;"><span>📱</span> Open BusPlus app</a>
+                <a href="{{ url_for('views.landing') }}" class="admin-nav-item" style="color:#64748b;"><span>📱</span> Open {{ site.APP_NAME }} app</a>
                 <a href="{{ url_for('auth.admin_logout') }}" class="admin-nav-item" style="color:#dc2626;"><span>⎋</span> Sign out</a>
             </div>
         </aside>
@@ -53,7 +53,7 @@
                 <div class="admin-header-row">
                     <div class="admin-title">
                         <h2>Drivers</h2>
-                        <p>Drivers sign in on the BusPlus app (not here) with the name and PIN you set.</p>
+                        <p>Drivers sign in on the {{ site.APP_NAME }} app (not here) with the name and PIN you set.</p>
                     </div>
                     <button class="btn btn-primary" onclick="openDriverModal()"><span>+</span> Add Driver</button>
                 </div>
@@ -189,8 +189,8 @@
                         <div class="stat-value">{{ buses|length }}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">Students / Teachers</div>
-                        <div class="stat-value">{{ buses | rejectattr('audience', 'equalto', 'teacher') | list | length }} / {{ buses | selectattr('audience', 'equalto', 'teacher') | list | length }}</div>
+                        <div class="stat-label">{% for key, rider in rider_types.items() %}{{ rider.plural }}{{ " / " if not loop.last }}{% endfor %}</div>
+                        <div class="stat-value">{% for key in rider_types %}{{ buses | selectattr('audience', 'equalto', key) | list | length }}{{ " / " if not loop.last }}{% endfor %}</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">Live now</div>
@@ -228,10 +228,14 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <select class="inline-audience-select audience-{{ bus.audience or 'student' }}" aria-label="Who {{ bus.bus_number }} is for"
-                                            data-bus-id="{{ bus.bus_id }}" data-current="{{ bus.audience or 'student' }}" onchange="changeBusAudience(this)">
-                                        <option value="student" {% if (bus.audience or 'student') == 'student' %}selected{% endif %}>🎓 Students</option>
-                                        <option value="teacher" {% if bus.audience == 'teacher' %}selected{% endif %}>👩‍🏫 Teachers</option>
+                                    {% set aud = rider_types.get(bus.audience) %}
+                                    <select class="inline-audience-select" aria-label="Who {{ bus.bus_number }} is for"
+                                            style="--aud-color: {{ aud.color if aud else '#64748b' }}"
+                                            data-bus-id="{{ bus.bus_id }}" data-current="{{ bus.audience }}" onchange="changeBusAudience(this)">
+                                        {% if not aud %}<option value="" selected disabled>Choose…</option>{% endif %}
+                                        {% for key, rider in rider_types.items() %}
+                                        <option value="{{ key }}" {% if bus.audience == key %}selected{% endif %}>{{ rider.icon }} {{ rider.plural }}</option>
+                                        {% endfor %}
                                     </select>
                                 </td>
                                 <td>
@@ -264,12 +268,12 @@
                 </div>
             </section>
 
-            <!-- ================= USERS (students & teachers) ================= -->
+            <!-- ================= USERS (every rider type) ================= -->
             <section id="tab-users" class="tab-section">
                 <div class="admin-header-row">
                     <div class="admin-title">
                         <h2>Users</h2>
-                        <p>Students and teachers who have opened the live map.</p>
+                        <p>{% for key, r in rider_types.items() %}{{ r.plural }}{{ ', ' if not loop.last }}{% endfor %} who have opened the live map.</p>
                     </div>
                 </div>
                 <div class="table-card">
@@ -282,7 +286,8 @@
                             <tr>
                                 <td><b>{{ rider.rider_id }}</b></td>
                                 <td>{{ rider.full_name }}</td>
-                                <td>{{ "👩‍🏫 Teacher" if rider.role == "teacher" else "🎓 Student" }}</td>
+                                {% set rtype = rider_types.get(rider.role) %}
+                                <td>{{ rtype.icon ~ " " ~ rtype.label if rtype else rider.role }}</td>
                                 <td><time class="local-time" datetime="{{ rider.last_seen_at }}">{{ rider.last_seen_at[:16].replace("T", " ") }} UTC</time></td>
                             </tr>
                             {% else %}
@@ -316,7 +321,7 @@
                     </div>
                     <div class="field">
                         <label class="field-label" for="driver-pin">Login PIN</label>
-                        <input type="password" id="driver-pin" class="custom-input" inputmode="numeric" pattern="\d{4,8}" maxlength="8" placeholder="4–8 digits" autocomplete="new-password">
+                        <input type="password" id="driver-pin" data-placeholder="{{ pin_rules.min }}–{{ pin_rules.max }} digits" class="custom-input" inputmode="numeric" pattern="\d{ {{- pin_rules.min }},{{ pin_rules.max -}} }" maxlength="{{ pin_rules.max }}" placeholder="{{ pin_rules.min }}–{{ pin_rules.max }} digits" autocomplete="new-password">
                         <div class="field-note" id="driver-pin-note"></div>
                     </div>
                 </div>
@@ -407,16 +412,17 @@
                     </div>
                     <div class="field">
                         <label class="field-label" for="bus-capacity">Seats</label>
-                        <input type="number" id="bus-capacity" class="custom-input" min="1" max="120" value="52" required>
+                        <input type="number" id="bus-capacity" class="custom-input" min="1" max="{{ max_bus_seats }}" value="{{ default_bus_seats }}" required>
                     </div>
                 </div>
                 <div class="field">
                     <span class="field-label">Bus for</span>
                     <div class="audience-choice" role="radiogroup" aria-label="Bus for">
-                        <label><input type="radio" name="bus-audience" value="student" checked> 🎓 Students</label>
-                        <label><input type="radio" name="bus-audience" value="teacher"> 👩‍🏫 Teachers</label>
+                        {% for key, rider in rider_types.items() %}
+                        <label><input type="radio" name="bus-audience" value="{{ key }}" {% if loop.first %}checked{% endif %}> {{ rider.icon }} {{ rider.plural }}</label>
+                        {% endfor %}
                     </div>
-                    <div class="field-note">Students only see student buses; teachers only see teacher buses.</div>
+                    <div class="field-note">Each group only sees the buses meant for it.</div>
                 </div>
                 <div class="field">
                     <label class="field-label" for="bus-route-id">Route today</label>
@@ -445,7 +451,7 @@
 
     <div id="admin-toast" role="status" aria-live="polite"></div>
 
-    <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination} | tojson }}</script>
+    <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_bus_seats": default_bus_seats} | tojson }}</script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>
 </html>

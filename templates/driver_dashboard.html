@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}BusPlus Driver{% endblock %}
+{% block title %}{{ site.APP_NAME }} · {{ driver_button.label }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/driver.css') }}">
@@ -24,7 +24,7 @@
     <!-- Menu under the bus icon -->
     <aside class="drv-menu" id="drv-menu" aria-label="Driver menu" aria-hidden="true">
         <div class="drv-menu-head">
-            <span class="drv-menu-brand">BusPlus</span>
+            <span class="drv-menu-brand">{{ site.APP_NAME }}</span>
             <span class="drv-menu-id">{{ driver.driver_id }}</span>
         </div>
 

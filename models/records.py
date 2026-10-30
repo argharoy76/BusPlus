@@ -42,7 +42,7 @@ class BusRecord(db.Model):
     route_id: Mapped[str] = mapped_column(ForeignKey("routes.route_id"))
     color_hex: Mapped[str] = mapped_column(String(7))                         # marker colour on the map
     capacity: Mapped[int] = mapped_column(Integer, default=52)
-    audience: Mapped[str] = mapped_column(String(10), default="student")      # "student" or "teacher"
+    audience: Mapped[str] = mapped_column(String(20))                         # rider type, e.g. "student"
 
 
 class DriverRecord(db.Model):
@@ -69,7 +69,7 @@ class RiderRecord(db.Model):
     __table_args__ = (UniqueConstraint("role", "rider_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    role: Mapped[str] = mapped_column(String(10))                              # "student" or "teacher"
+    role: Mapped[str] = mapped_column(String(20))                              # rider type, e.g. "student"
     rider_id: Mapped[str] = mapped_column(String(40))                          # student / teacher ID
     full_name: Mapped[str] = mapped_column(String(60))
     first_seen_at: Mapped[str] = mapped_column(String(40))

@@ -12,8 +12,9 @@ from datetime import UTC, datetime
 
 from config import Config
 from models.records import BusRecord
+from models.rider_types import DEFAULT_RIDER_KEY, RIDER_KEYS
 
-BUS_AUDIENCES = ("student", "teacher")   # who may see a bus on their map
+BUS_AUDIENCES = RIDER_KEYS   # who may see a bus on their map (set in content/user_types.py)
 
 
 @dataclass
@@ -27,7 +28,7 @@ class Bus:
     license_plate: str = ""
     color_hex: str = "#0866FF"           # the bus's own marker colour
     capacity: int = 52
-    audience: str = "student"            # "student" or "teacher"
+    audience: str = DEFAULT_RIDER_KEY    # which rider type sees this bus, e.g. "student"
 
     # ---- the driver assigned to it (kept in step by the driver setup) ----
     driver_id: str | None = None

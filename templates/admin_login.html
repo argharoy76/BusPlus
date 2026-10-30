@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BusPlus Backend - Admin Sign In</title>
+    <title>{{ site.APP_NAME }} Backend - Admin Sign In</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
@@ -63,7 +63,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>
             </div>
             <div>
-                <h1>BusPlus Backend</h1>
+                <h1>{{ site.APP_NAME }} Backend</h1>
                 <p class="sub">Admin only</p>
             </div>
         </div>

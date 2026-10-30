@@ -16,6 +16,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from content import map_settings, rules, site_text
+
 BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"          # database + local secrets (ignored by Git)
 INSTANCE_DIR.mkdir(exist_ok=True)
@@ -115,30 +117,14 @@ class Config:
     SEED_DEMO_DRIVERS = env_bool("BUSPLUS_DEMO_DRIVERS", not IS_PRODUCTION)
 
     # ------------------------------------------------------------------
-    # BusPlus constants
+    # BusPlus constants - edit them in the content/ folder, not here.
     # ------------------------------------------------------------------
-    UNIVERSITY_NAME = "Khulna University"
-
-    # Map centre used before any bus or home is known.
-    UNIVERSITY_LOCATION = {"latitude": 22.8010, "longitude": 89.5345}
-
-    # Every route ends here. Change it once to move the end point for all buses.
-    FINAL_DESTINATION = {
-        "stop_name": "Hadi Chattar",
-        "latitude": 22.80209,
-        "longitude": 89.53398,
-        "landmark_hint": "Khulna University · Hadi Chattar",
-    }
-
-    # Local time zone ("today" for driver duties, arrival clock times).
-    TIMEZONE = "Asia/Dhaka"
-
-    # A driver account is locked to one phone while in use. If that phone is quiet
-    # for this long, the driver may sign in on another phone.
-    DRIVER_SESSION_TIMEOUT_MINUTES = 10
-
-    # Default "notify me N minutes before the bus arrives".
-    DEFAULT_ALERT_MINUTES = 5
+    UNIVERSITY_NAME = site_text.UNIVERSITY_NAME
+    UNIVERSITY_LOCATION = map_settings.MAP_CENTER          # map centre before any bus/home is known
+    FINAL_DESTINATION = map_settings.FINAL_DESTINATION     # last stop of every route (Hadi Chattar)
+    TIMEZONE = map_settings.TIMEZONE
+    DRIVER_SESSION_TIMEOUT_MINUTES = rules.DRIVER_LOCK_MINUTES
+    DEFAULT_ALERT_MINUTES = rules.DEFAULT_ALERT_MINUTES
 
     # Road router used by the route editor to snap a route to real roads (OpenStreetMap data).
     ROAD_ROUTER_URL = os.environ.get("ROAD_ROUTER_URL", "https://router.project-osrm.org/route/v1/driving/")

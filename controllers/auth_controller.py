@@ -3,7 +3,7 @@ Sign-in and sign-out for everyone.
 
   * Admin:    username + password, only for the backend (/backend).
   * Driver:   name + their bus's route + PIN set by the admin; front end only.
-  * Student / teacher: name + ID (no password), to open their live map.
+  * Riders (students, teachers, ... see content/user_types.py): name + ID, no password.
 
 Login endpoints are rate-limited per IP address (Flask-Limiter) to stop
 password/PIN guessing.
@@ -14,8 +14,10 @@ import hmac
 from flask import Blueprint, current_app, redirect, request, session, url_for
 
 from config import Config
+from content import rules
 from controllers.helpers import fail, json_body, ok
 from extensions import limiter
+from models.rider_types import rider_info
 from services import store, tracking, users
 from services.user_service import LoginError, new_session_token
 
@@ -38,7 +40,7 @@ def _start_fresh_session(keep_admin: bool = True) -> None:
 # Admin (backend only)
 # ---------------------------------------------------------------------------
 @auth_bp.post("/api/auth/admin/login")
-@limiter.limit("5 per minute; 30 per hour")
+@limiter.limit(rules.ADMIN_LOGIN_LIMIT)
 def admin_login():
     """Sign the admin in. Compares in constant time so the password can't be guessed by timing."""
     data = json_body()
@@ -78,7 +80,7 @@ def search_drivers():
 
 
 @auth_bp.post("/api/auth/driver/login")
-@limiter.limit("10 per minute; 60 per hour")
+@limiter.limit(rules.DRIVER_LOGIN_LIMIT)
 def driver_login():
     """
     Sign a driver in. Body: {"driver_id" or "driver_name", "route_id", "pin"}.
@@ -110,34 +112,29 @@ def driver_login():
 
 
 # ---------------------------------------------------------------------------
-# Students and teachers (front end)
+# Students, teachers and any other rider type from content/user_types.py
 # ---------------------------------------------------------------------------
-def _rider_login(role: str):
-    """Shared sign-in for students and teachers: just a name and an ID."""
+@auth_bp.post("/api/auth/<rider_type>/login")
+@limiter.limit(rules.RIDER_LOGIN_LIMIT)
+def rider_login(rider_type: str):
+    """
+    Sign-in for a rider type (e.g. /api/auth/student/login): just a name and an ID.
+    Body: {"full_name": ..., "rider_id": ...}  (the older "<type>_id" key also works).
+    """
+    info = rider_info(rider_type)
+    if info is None:
+        return fail("Not found.", 404)
     data = json_body()
-    rider_id = str(data.get(f"{role}_id") or "").strip()[:40]
+    rider_id = str(data.get("rider_id") or data.get(f"{rider_type}_id") or "").strip()[:40]
     full_name = str(data.get("full_name") or "").strip()[:60]
     if not rider_id or not full_name:
-        return fail(f"Please enter your name and {role} ID.")
-    store.record_rider(role, rider_id, full_name)
+        return fail(f"Please enter your name and {info['id_label']}.")
+    store.record_rider(rider_type, rider_id, full_name)
     _start_fresh_session()
     session.permanent = True
-    session.update(role=role, rider_id=rider_id, rider_name=full_name)
-    return ok(message=f"Welcome, {full_name}", redirect_url=url_for(f"views.{role}_dashboard"))
-
-
-@auth_bp.post("/api/auth/student/login")
-@limiter.limit("20 per minute")
-def student_login():
-    """Student sign-in. Body: {full_name, student_id}."""
-    return _rider_login("student")
-
-
-@auth_bp.post("/api/auth/teacher/login")
-@limiter.limit("20 per minute")
-def teacher_login():
-    """Teacher sign-in. Body: {full_name, teacher_id}."""
-    return _rider_login("teacher")
+    session.update(role=rider_type, rider_id=rider_id, rider_name=full_name)
+    return ok(message=f"Welcome, {full_name}",
+              redirect_url=url_for("views.rider_dashboard", rider_type=rider_type))
 
 
 # ---------------------------------------------------------------------------

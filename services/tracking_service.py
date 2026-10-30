@@ -19,6 +19,7 @@ import time
 import uuid
 from itertools import pairwise
 
+from content import colors, rules
 from models.bus import BUS_AUDIENCES, Bus
 from models.records import BusRecord, RouteRecord
 from models.route import FINAL_STOP_NAME, BusRoute, BusStop
@@ -27,13 +28,12 @@ from services import geo, store
 HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 TIME_RE = re.compile(r"^(0?[1-9]|1[0-2]):[0-5]\d\s?(AM|PM)$", re.IGNORECASE)
 
-# Colours offered to new buses and new routes (the first unused one is picked).
-BUS_COLOR_PALETTE = ["#E11D48", "#0891B2", "#EA580C", "#7C3AED", "#16A34A",
-                     "#DB2777", "#CA8A04", "#4F46E5", "#0D9488", "#9333EA"]
-ROUTE_COLOR_PALETTE = ["#2563EB", "#059669", "#D97706", "#DB2777", "#7C3AED", "#0891B2", "#65A30D", "#DC2626"]
+# Colours offered to new buses and new routes (the first unused one is picked): content/colors.py
+BUS_COLOR_PALETTE = colors.BUS_COLORS
+ROUTE_COLOR_PALETTE = colors.ROUTE_COLORS
 
-TRAIL_MIN_STEP_KM = 0.012     # ignore GPS wobble smaller than ~12 m when drawing the trail
-TRAIL_MAX_POINTS = 1500       # keep at most this many trail points per bus
+TRAIL_MIN_STEP_KM = rules.TRAIL_MIN_STEP_KM   # ignore GPS wobble smaller than this when drawing the trail
+TRAIL_MAX_POINTS = rules.TRAIL_MAX_POINTS     # keep at most this many trail points per bus
 AT_STOP_RADIUS_KM = 0.2       # closer than this to a stop = "at the stop"
 
 SIMULATION_TICK_S = 1.0       # test drive: one position update per second
@@ -219,8 +219,8 @@ class TrackingService:
                 license_plate=clean.get("license_plate", ""),
                 assigned_route_id=clean["assigned_route_id"],
                 color_hex=clean.get("color_hex") or _first_unused(BUS_COLOR_PALETTE, used_colors),
-                capacity=clean.get("capacity", 52),
-                audience=clean.get("audience", "student"),
+                capacity=clean.get("capacity", rules.DEFAULT_BUS_SEATS),
+                audience=clean.get("audience", BUS_AUDIENCES[0]),
             )
             self._park_at_route_start(bus)
             self._buses[bus.bus_id] = bus
@@ -294,7 +294,7 @@ class TrackingService:
         if data.get("audience"):
             audience = str(data["audience"]).strip().lower()
             if audience not in BUS_AUDIENCES:
-                raise ValueError("A bus is either for students or for teachers.")
+                raise ValueError(f"A bus must be for one of: {', '.join(BUS_AUDIENCES)}.")
             clean["audience"] = audience
 
         if data.get("capacity") not in (None, ""):
@@ -302,8 +302,8 @@ class TrackingService:
                 capacity = int(data["capacity"])
             except (TypeError, ValueError):
                 raise ValueError("Capacity must be a whole number.") from None
-            if not 1 <= capacity <= 120:
-                raise ValueError("Capacity must be between 1 and 120.")
+            if not 1 <= capacity <= rules.MAX_BUS_SEATS:
+                raise ValueError(f"Capacity must be between 1 and {rules.MAX_BUS_SEATS}.")
             clean["capacity"] = capacity
         return clean
 

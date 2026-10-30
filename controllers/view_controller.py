@@ -1,33 +1,26 @@
 """
 The front-end pages (HTML).
 
-  /                      start page: Driver, Student or Teacher
+  /                      start page: Driver + one button per rider type
   /driver/login          driver sign-in
   /driver/dashboard      driver's full-screen map (signed-in driver only)
-  /student/login         student sign-in
-  /student/dashboard     student live map (student buses only)
-  /teacher/login         teacher sign-in
-  /teacher/dashboard     teacher live map (teacher buses only)
+  /<type>/login          rider sign-in, e.g. /student/login, /teacher/login
+  /<type>/dashboard      rider live map with only that type's buses, e.g. /student/dashboard
+                         (rider types are listed in content/user_types.py)
 """
 
-from flask import Blueprint, redirect, render_template, session, url_for
+from flask import Blueprint, abort, redirect, render_template, session, url_for
 
 from config import Config
 from extensions import talisman
+from models.rider_types import rider_info
 from services import tracking, users
 
 view_bp = Blueprint("views", __name__)
 
-# Wording for the shared student/teacher pages.
-PORTALS = {
-    "student": {"label": "Student", "id_label": "Student ID"},
-    "teacher": {"label": "Teacher", "id_label": "Teacher ID"},
-}
-
-
 @view_bp.get("/")
 def landing():
-    """Start page with the Driver, Student and Teacher buttons."""
+    """Start page: the Driver button and one button per rider type (content/user_types.py)."""
     return render_template("landing.html")
 
 
@@ -78,47 +71,34 @@ def driver_dashboard():
 
 
 # ---------------------------------------------------------------------------
-# Students and teachers
+# Riders: students, teachers and any other type from content/user_types.py
+# (templates student_login.html / student_dashboard.html serve every rider type)
 # ---------------------------------------------------------------------------
-def _rider_login_page(audience: str):
-    return render_template("student_login.html", portal=audience, portal_info=PORTALS[audience])
+@view_bp.get("/<rider_type>/login")
+def rider_login(rider_type: str):
+    """Sign-in page of a rider type, e.g. /student/login or /teacher/login."""
+    info = rider_info(rider_type)
+    if info is None:
+        abort(404)
+    return render_template("student_login.html", portal=rider_type, portal_info=info)
 
 
-def _rider_dashboard(audience: str):
-    """Live map for a signed-in student or teacher; each only sees the buses meant for them."""
-    if session.get("role") != audience or not session.get("rider_id"):
-        return redirect(url_for(f"views.{audience}_login"))
+@view_bp.get("/<rider_type>/dashboard")
+def rider_dashboard(rider_type: str):
+    """Live map of a rider type, e.g. /student/dashboard. Shows only the buses meant for that type."""
+    info = rider_info(rider_type)
+    if info is None:
+        abort(404)
+    if session.get("role") != rider_type or not session.get("rider_id"):
+        return redirect(url_for("views.rider_login", rider_type=rider_type))
     return render_template(
         "student_dashboard.html",
-        audience=audience,
+        audience=rider_type,
+        portal_info=info,
         rider_id=session["rider_id"],
-        rider_name=session.get("rider_name", PORTALS[audience]["label"]),
+        rider_name=session.get("rider_name", info["label"]),
         routes=tracking.all_routes(),
-        buses=tracking.all_buses(audience),
+        buses=tracking.all_buses(rider_type),
         alert_lead_minutes=Config.DEFAULT_ALERT_MINUTES,
         map_center=Config.UNIVERSITY_LOCATION,
     )
-
-
-@view_bp.get("/student/login")
-def student_login():
-    """Student sign-in page."""
-    return _rider_login_page("student")
-
-
-@view_bp.get("/teacher/login")
-def teacher_login():
-    """Teacher sign-in page."""
-    return _rider_login_page("teacher")
-
-
-@view_bp.get("/student/dashboard")
-def student_dashboard():
-    """Live map with the student buses."""
-    return _rider_dashboard("student")
-
-
-@view_bp.get("/teacher/dashboard")
-def teacher_dashboard():
-    """Live map with the teacher buses."""
-    return _rider_dashboard("teacher")

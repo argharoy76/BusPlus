@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Driver Login - BusPlus{% endblock %}
+{% block title %}{{ driver_button.label }} Login · {{ site.APP_NAME }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
@@ -17,10 +17,10 @@
 <div class="mobile-fullscreen-view" style="justify-content: flex-start;">
     <!-- Top Navigation Header -->
     <div class="mobile-nav-header">
-        <a href="/" class="fluid-back-btn" title="Back">
+        <a href="{{ url_for('views.landing') }}" class="fluid-back-btn" title="Back">
             ←
         </a>
-        <h2 class="fluid-page-title">Driver Login</h2>
+        <h2 class="fluid-page-title">{{ driver_button.label }} Login</h2>
         <div style="width: 44px;"></div> <!-- Spacer -->
     </div>
 
@@ -53,7 +53,7 @@
 
         <!-- Animated Submit Button -->
         <button type="submit" class="fluid-submit-btn">
-            Log In as Driver
+            {{ site.DRIVER_LOGIN_BUTTON_TEXT }}
         </button>
     </form>
 </div>

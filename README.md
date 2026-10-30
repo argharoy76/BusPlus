@@ -30,10 +30,14 @@ python app.py
 
 Optional: copy `.env.example` to `.env` to choose your own settings.
 
+### Change the website easily: the `content/` folder
+
+Names, start-page buttons (add **Passenger** in `content/user_types.py` and it appears everywhere), map centre, final stop, colours and rules are plain settings in `content/`. Edit, save, restart. A short guide to the whole codebase is in **README.txt**.
+
 ### Tests and code checks
 
 ```bash
-pytest          # 30 automated tests
+pytest          # automated tests
 ruff check .    # code style and common mistakes
 ```
 

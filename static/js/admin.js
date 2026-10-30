@@ -80,7 +80,7 @@ function openDriverModal(driver) {
     const pinInput = document.getElementById("driver-pin");
     pinInput.value = "";
     pinInput.required = !editing;
-    pinInput.placeholder = editing ? "New PIN (optional)" : "4–8 digits";
+    pinInput.placeholder = editing ? "New PIN (optional)" : pinInput.dataset.placeholder;
     document.getElementById("driver-pin-note").textContent = editing ? "Leave empty to keep the current PIN." : "";
     if (editing && driver.assigned_bus_id) driverBusSelect.value = driver.assigned_bus_id;
     updateDriverRouteNote();
@@ -400,8 +400,9 @@ async function changeBusAudience(select) {
     const { ok, data } = await api("PUT", `/api/admin/buses/${encodeURIComponent(select.dataset.busId)}`, { audience: select.value });
     if (ok) {
         select.dataset.current = select.value;
-        select.className = `inline-audience-select audience-${select.value}`;
-        toast(`${data.bus.bus_number} is now a ${select.value === "teacher" ? "teacher" : "student"} bus.`);
+        const rider = ADMIN_DATA.rider_types[select.value];
+        select.style.setProperty("--aud-color", rider.color);
+        toast(`${data.bus.bus_number} is now a bus for ${rider.plural.toLowerCase()}.`);
     } else {
         select.value = previous;
         toast(data.message || "Could not change it.", true);
@@ -431,9 +432,10 @@ function openBusModal(bus) {
     document.getElementById("bus-number").value = editing ? bus.bus_number : "";
     document.getElementById("bus-name").value = editing ? bus.bus_name : "";
     document.getElementById("bus-plate").value = editing ? (bus.license_plate || "") : "";
-    document.getElementById("bus-capacity").value = editing ? bus.capacity : 52;
+    document.getElementById("bus-capacity").value = editing ? bus.capacity : ADMIN_DATA.default_bus_seats;
     if (editing) document.getElementById("bus-route-id").value = bus.assigned_route_id;
-    const aud = editing && bus.audience === "teacher" ? "teacher" : "student";
+    const firstType = Object.keys(ADMIN_DATA.rider_types)[0];
+    const aud = editing && ADMIN_DATA.rider_types[bus.audience] ? bus.audience : firstType;
     document.querySelectorAll('input[name="bus-audience"]').forEach(r => { r.checked = r.value === aud; });
     const used = new Set(ADMIN_DATA.buses.map(b => (b.color_hex || "").toUpperCase()));
     const free = Array.from(busSwatches).map(b => b.dataset.color).find(c => !used.has(c.toUpperCase()));
@@ -451,7 +453,7 @@ document.getElementById("form-bus").addEventListener("submit", async (e) => {
         license_plate: document.getElementById("bus-plate").value.trim(),
         capacity: document.getElementById("bus-capacity").value,
         assigned_route_id: document.getElementById("bus-route-id").value,
-        audience: document.querySelector('input[name="bus-audience"]:checked')?.value || "student",
+        audience: document.querySelector('input[name="bus-audience"]:checked')?.value,
         color_hex: busColorInput.value
     };
     const { ok, data } = await api(id ? "PUT" : "POST", id ? `/api/admin/buses/${encodeURIComponent(id)}` : "/api/admin/buses", payload);
@@ -460,7 +462,7 @@ document.getElementById("form-bus").addEventListener("submit", async (e) => {
 });
 
 async function deleteBus(busId, busNumber) {
-    if (!confirm(`Delete ${busNumber}? Students will no longer see it.`)) return;
+    if (!confirm(`Delete ${busNumber}? Nobody will see it on the map any more.`)) return;
     const { ok, data } = await api("DELETE", `/api/admin/buses/${encodeURIComponent(busId)}`);
     if (ok) location.reload(); else toast(data.message || "Could not delete the bus.", true);
 }

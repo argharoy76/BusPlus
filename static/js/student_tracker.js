@@ -257,7 +257,7 @@ class BottomSheet {
 class StudentTracker {
     constructor() {
         const data = window.APP_DATA || {};
-        this.audience = data.audience === "teacher" ? "teacher" : "student";
+        this.audience = data.audience;          // rider type key, e.g. "student" (content/user_types.py)
         this.allRoutes = data.routes || [];
         this.latestBuses = data.buses || [];
 

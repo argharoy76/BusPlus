@@ -375,3 +375,19 @@ def test_pages_render(client, admin, driver_login):
     for section in ("Drivers", "Routes", "Buses", "Users"):
         assert section in page
     assert client.get("/api/nothing").get_json() == {"success": False, "message": "Not found."}
+
+
+# ---------------------------------------------------------------------------
+# Rider types from content/user_types.py
+# ---------------------------------------------------------------------------
+def test_every_rider_type_gets_button_login_and_map(client):
+    from content.user_types import RIDER_TYPES
+    landing = client.get("/").get_data(as_text=True)
+    for key, info in RIDER_TYPES.items():
+        assert f"/{key}/login" in landing and info["label"] in landing
+        assert info["id_label"] in client.get(f"/{key}/login").get_data(as_text=True)
+        resp = client.post(f"/api/auth/{key}/login", json={"full_name": "Test", "rider_id": "X1"})
+        assert resp.get_json()["redirect_url"] == f"/{key}/dashboard"
+        assert client.get(f"/{key}/dashboard").status_code == 200
+    assert client.get("/nobody/login").status_code == 404
+    assert client.post("/api/auth/nobody/login", json={"full_name": "A", "rider_id": "1"}).status_code == 404

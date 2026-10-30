@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}BusPlus - Khulna University{% endblock %}
+{% block title %}{{ site.APP_NAME }} · {{ site.UNIVERSITY_NAME }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
@@ -25,38 +25,28 @@
             <div class="floating-bus-badge">🚌</div>
         </div>
 
-        <h1 class="app-brand-title">BusPlus</h1>
-        <span class="app-brand-badge">Khulna University</span>
+        <h1 class="app-brand-title">{{ site.APP_NAME }}</h1>
+        <span class="app-brand-badge">{{ site.UNIVERSITY_NAME }}</span>
     </div>
 
-    <!-- Fluid Action Buttons -->
+    <!-- Buttons: Driver first, then one per rider type (edit them in content/user_types.py) -->
     <div class="fluid-actions-stack">
-        <!-- Option 1: Driver -->
-        <a href="/driver/login" class="fluid-touch-btn btn-driver">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div class="btn-icon-wrapper">👨‍✈️</div>
-                <span>Driver</span>
+        <a href="{{ url_for('views.driver_login') }}" class="fluid-touch-btn" style="--btn-color: {{ driver_button.color }}">
+            <div class="btn-label">
+                <div class="btn-icon-wrapper">{{ driver_button.icon }}</div>
+                <span>{{ driver_button.label }}</span>
             </div>
             <div class="btn-arrow-pill">›</div>
         </a>
-
-        <!-- Option 2: Student -->
-        <a href="/student/login" id="landing-student-btn" class="fluid-touch-btn btn-student">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div class="btn-icon-wrapper">🎓</div>
-                <span>Student</span>
+        {% for key, rider in rider_types.items() %}
+        <a href="{{ url_for('views.rider_login', rider_type=key) }}" class="fluid-touch-btn" style="--btn-color: {{ rider.color }}">
+            <div class="btn-label">
+                <div class="btn-icon-wrapper">{{ rider.icon }}</div>
+                <span>{{ rider.label }}</span>
             </div>
             <div class="btn-arrow-pill">›</div>
         </a>
-
-        <!-- Option 3: Teacher -->
-        <a href="/teacher/login" id="landing-teacher-btn" class="fluid-touch-btn btn-teacher">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div class="btn-icon-wrapper">👩‍🏫</div>
-                <span>Teacher</span>
-            </div>
-            <div class="btn-arrow-pill">›</div>
-        </a>
+        {% endfor %}
     </div>
 </div>
 {% endblock %}

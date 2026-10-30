@@ -13,14 +13,21 @@ Run on the server:      gunicorn -c gunicorn.conf.py wsgi:app   (see DEPLOYMENT.
 
 from pathlib import Path
 
-from flask import Flask, jsonify, request
-from flask_wtf.csrf import CSRFError
-from werkzeug.middleware.proxy_fix import ProxyFix
+try:
+    from flask import Flask, jsonify, request
+    from flask_wtf.csrf import CSRFError
+    from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import Config
-from controllers import ALL_BLUEPRINTS
-from extensions import csrf, db, limiter, talisman
-from services import store, tracking, users
+    from config import Config
+    from content import colors, rules, site_text
+    from controllers import ALL_BLUEPRINTS
+    from extensions import csrf, db, limiter, talisman
+    from models.rider_types import DRIVER, RIDER_TYPES
+    from services import store, tracking, users
+except ModuleNotFoundError as missing:
+    # A library from requirements.txt isn't installed yet: say how to fix it instead of a long error.
+    raise SystemExit(f"\nMissing library: {missing.name}\nInstall BusPlus's libraries first, then start again:\n"
+                     "    pip install -r requirements.txt\n    python app.py\n") from missing
 
 # Content-Security-Policy: the browser may only load scripts, styles, fonts and
 # data from this site, plus map tiles from Google. Blocks injected third-party code.
@@ -81,6 +88,18 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         app.register_blueprint(blueprint)
     _register_error_handlers(app)
     _add_static_versions(app)
+
+    @app.context_processor
+    def content_for_templates() -> dict:
+        """Settings from the content/ folder, available in every HTML template."""
+        return {
+            "site": site_text,                    # {{ site.APP_NAME }}, {{ site.UNIVERSITY_NAME }}, ...
+            "rider_types": RIDER_TYPES,           # Student, Teacher, ... (content/user_types.py)
+            "driver_button": DRIVER,
+            "brand_color": colors.BRAND_COLOR,
+            "pin_rules": {"min": rules.PIN_MIN_DIGITS, "max": rules.PIN_MAX_DIGITS},
+        }
+
     return app
 
 

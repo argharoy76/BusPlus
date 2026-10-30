@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{# Sign-in page for students AND teachers (portal = "student" or "teacher"). #}
+{# Sign-in page for every rider type (portal = its key, e.g. "student"; portal_info = its settings from content/user_types.py). #}
 
-{% block title %}{{ portal_info.label }} Login - BusPlus{% endblock %}
+{% block title %}{{ portal_info.label }} Login · {{ site.APP_NAME }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
@@ -18,7 +18,7 @@
 <div class="mobile-fullscreen-view" style="justify-content: flex-start;">
     <!-- Top Navigation Header -->
     <div class="mobile-nav-header">
-        <a href="/" class="fluid-back-btn" title="Back">
+        <a href="{{ url_for('views.landing') }}" class="fluid-back-btn" title="Back">
             ←
         </a>
         <h2 class="fluid-page-title">{{ portal_info.label }} Login</h2>
@@ -34,7 +34,7 @@
             <label class="fluid-question-label" for="input-student-name">
                 {{ portal_info.label }}'s Name
             </label>
-            <input type="text" id="input-student-name" class="fluid-input" placeholder="Enter your name" autocomplete="name" required autofocus>
+            <input type="text" id="input-student-name" class="fluid-input" placeholder="{{ site.LOGIN_NAME_PLACEHOLDER }}" autocomplete="name" required autofocus>
         </div>
 
         <!-- Option 2: Student ID -->
@@ -46,14 +46,14 @@
         </div>
 
         <!-- See Map Button -->
-        <button type="submit" class="fluid-submit-btn" style="{% if portal == 'teacher' %}background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); box-shadow: 0 12px 28px -6px rgba(124, 58, 237, 0.4);{% else %}background: var(--accent-emerald-gradient); box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.4);{% endif %}">
-            See Map →
+        <button type="submit" class="fluid-submit-btn rider-submit-btn" style="--btn-color: {{ portal_info.color }}">
+            {{ site.LOGIN_BUTTON_TEXT }}
         </button>
     </form>
 </div>
 
 <script>
-    const PORTAL = {{ portal | tojson }};               // "student" or "teacher"
+    const PORTAL = {{ portal | tojson }};               // rider type key, e.g. "student"
     const KEY_ID = `busplus_${PORTAL}_id`;
     const KEY_NAME = `busplus_${PORTAL}_name`;
     const form = document.getElementById("student-login-form");
@@ -79,7 +79,7 @@
             const resp = await fetch(`/api/auth/${PORTAL}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ full_name: fullName, [`${PORTAL}_id`]: riderId })
+                body: JSON.stringify({ full_name: fullName, rider_id: riderId })
             });
             const data = await resp.json();
             if (!data.success) {
