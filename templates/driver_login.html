@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Driver Login - BusPlus{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- Ambient Background -->
+<div class="ambient-background">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+</div>
+
+<!-- Fluid Mobile Screen (No Box Structure) -->
+<div class="mobile-fullscreen-view" style="justify-content: flex-start;">
+    <!-- Top Navigation Header -->
+    <div class="mobile-nav-header">
+        <a href="/" class="fluid-back-btn" title="Back">
+            ←
+        </a>
+        <h2 class="fluid-page-title">Driver Login</h2>
+        <div style="width: 44px;"></div> <!-- Spacer -->
+    </div>
+
+    <!-- Error Alert Pill (Animated Shake) -->
+    <div id="login-error-box" class="fluid-error-pill"></div>
+
+    <!-- Fluid Form -->
+    <form id="driver-login-form" class="fluid-form-container">
+        <!-- 1. Driver Name (Type & Autocomplete) -->
+        <div class="fluid-input-wrap">
+            <input type="text" id="input-driver-name" class="fluid-input" placeholder="Driver name" autocomplete="off" required>
+            <input type="hidden" id="hidden-driver-id">
+            <div id="driver-suggestions" class="fluid-autocomplete-dropdown"></div>
+        </div>
+
+        <!-- 2. Route Option (under the name) -->
+        <div class="fluid-input-wrap">
+            <select id="select-driver-route" class="fluid-select" required>
+                <option value="" disabled selected>Select route</option>
+                {% for r in routes %}
+                <option value="{{ r.route_id }}">{{ r.route_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- 3. PIN Option (under the route) -->
+        <div class="fluid-input-wrap">
+            <input type="password" id="input-driver-pin" class="fluid-input" placeholder="PIN" inputmode="numeric" autocomplete="current-password" required>
+        </div>
+
+        <!-- Animated Submit Button -->
+        <button type="submit" class="fluid-submit-btn">
+            Log In as Driver
+        </button>
+    </form>
+</div>
+
+<script>
+    const nameInput = document.getElementById("input-driver-name");
+    const hiddenDriverId = document.getElementById("hidden-driver-id");
+    const suggestionsMenu = document.getElementById("driver-suggestions");
+    const routeSelect = document.getElementById("select-driver-route");
+    const pinInput = document.getElementById("input-driver-pin");
+    const form = document.getElementById("driver-login-form");
+    const errorBox = document.getElementById("login-error-box");
+
+    let activeDriversList = [];
+
+    // Load active driver list from backend for live matching
+    async function loadDrivers() {
+        try {
+            const resp = await fetch("/api/drivers/search?q=");
+            const data = await resp.json();
+            if (data.success && data.drivers) {
+                activeDriversList = data.drivers;
+            }
+        } catch (e) {
+            console.error("Could not load drivers:", e);
+        }
+    }
+    loadDrivers();
+
+    // Autocomplete matching as driver types letters
+    nameInput.addEventListener("input", () => {
+        const query = nameInput.value.trim().toLowerCase();
+        errorBox.style.display = "none";
+        hiddenDriverId.value = "";   // typed by hand: match the name exactly on the server
+
+        if (query.length === 0) {
+            suggestionsMenu.style.display = "none";
+            suggestionsMenu.innerHTML = "";
+            return;
+        }
+
+        const matches = activeDriversList.filter(d => 
+            d.full_name.toLowerCase().includes(query) || 
+            (d.driver_id && d.driver_id.toLowerCase().includes(query))
+        );
+
+        if (matches.length === 0) {
+            suggestionsMenu.style.display = "none";
+            suggestionsMenu.innerHTML = "";
+            return;
+        }
+
+        suggestionsMenu.innerHTML = "";
+        matches.forEach(driver => {
+            const row = document.createElement("div");
+            row.className = "fluid-autocomplete-row";
+            // textContent (not innerHTML) so a name can never inject code into the page
+            const nameEl = document.createElement("div");
+            nameEl.className = "row-driver-name";
+            nameEl.textContent = driver.full_name;
+            const routeEl = document.createElement("div");
+            routeEl.className = "row-route-pill";
+            routeEl.textContent = driver.route_name || "";
+            row.appendChild(nameEl);
+            if (driver.route_name) row.appendChild(routeEl);
+            row.addEventListener("click", () => {
+                nameInput.value = driver.full_name;
+                hiddenDriverId.value = driver.driver_id;
+                suggestionsMenu.style.display = "none";
+
+                // Auto-select assigned route
+                if (driver.assigned_route_id) {
+                    routeSelect.value = driver.assigned_route_id;
+                }
+            });
+            suggestionsMenu.appendChild(row);
+        });
+
+        suggestionsMenu.style.display = "block";
+    });
+
+    // Close autocomplete on click outside
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest(".fluid-input-wrap")) {
+            suggestionsMenu.style.display = "none";
+        }
+    });
+
+    // Submit form with single-session concurrency check
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorBox.style.display = "none";
+
+        const driverName = nameInput.value.trim();
+        const driverId = hiddenDriverId.value;
+        const routeId = routeSelect.value;
+        const pin = pinInput.value.trim();
+
+        try {
+            const resp = await fetch("/api/auth/driver/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    driver_name: driverName,
+                    driver_id: driverId,
+                    route_id: routeId,
+                    pin: pin
+                })
+            });
+
+            const data = await resp.json();
+
+            if (data.success) {
+                window.location.href = data.redirect_url || "/driver/dashboard";
+            } else {
+                errorBox.textContent = data.message || "Invalid credentials. Please try again.";
+                errorBox.style.display = "block";
+            }
+        } catch (err) {
+            errorBox.textContent = "Connection error. Please try again.";
+            errorBox.style.display = "block";
+        }
+    });
+</script>
+{% endblock %}

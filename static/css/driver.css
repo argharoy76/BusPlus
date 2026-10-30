@@ -1,0 +1,565 @@
+/*
+ * Khulna University Bus Tracker (BusPlus)
+ * Driver app: full-screen map with a single bus icon
+ */
+
+:root {
+    --drv-blue: #0866ff;
+    --drv-blue-gradient: linear-gradient(135deg, #0866ff 0%, #1877f2 50%, #0052cc 100%);
+    --drv-text: #0f172a;
+    --drv-muted: #64748b;
+    --drv-border: #e2e8f0;
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #e2e8f0;
+}
+
+button {
+    font-family: inherit;
+}
+
+.drv-app {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+}
+
+#driver-map {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+/* Generic line icon */
+.drv-ico {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+
+.drv-ico-fill {
+    fill: currentColor;
+    stroke: none;
+}
+
+/* ---- The bus icon (top left) ---- */
+.drv-icon-btn {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 120;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 3px solid #ffffff;
+    background: var(--drv-blue-gradient);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(8, 102, 255, 0.35);
+    transition: transform 0.15s ease;
+}
+
+.drv-icon-btn:active {
+    transform: scale(0.94);
+}
+
+.drv-icon-btn .drv-ico {
+    width: 26px;
+    height: 26px;
+}
+
+.drv-icon-btn.menu-open {
+    box-shadow: 0 0 0 4px rgba(8, 102, 255, 0.2), 0 6px 18px rgba(8, 102, 255, 0.35);
+}
+
+/* GPS state shown on the icon: green = sending, amber = starting, red = off */
+.drv-gps-dot {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 3px solid #ffffff;
+    background: #f59e0b;
+}
+
+.drv-gps-dot.on {
+    background: #10b981;
+    animation: drvPulse 2s ease-out infinite;
+}
+
+.drv-gps-dot.off {
+    background: #ef4444;
+}
+
+@keyframes drvPulse {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+    100% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+}
+
+/* New duty notification */
+.drv-unseen-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 3px solid #ffffff;
+    background: #ef4444;
+}
+
+.drv-unseen-dot[hidden] {
+    display: none;
+}
+
+/* ---- Menu ---- */
+.drv-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(15, 23, 42, 0.2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.drv-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.drv-menu {
+    position: fixed;
+    top: 76px;
+    left: 14px;
+    z-index: 110;
+    width: 300px;
+    max-width: calc(100vw - 28px);
+    max-height: calc(100dvh - 92px);
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid var(--drv-border);
+    border-radius: 18px;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.22);
+    transform-origin: 26px -8px;
+    transform: translateY(-6px) scale(0.94);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.16s ease, visibility 0s linear 0.2s;
+}
+
+.drv-menu.open {
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.16s ease, visibility 0s;
+}
+
+.drv-menu-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--drv-border);
+}
+
+.drv-menu-brand {
+    font-size: 1.05rem;
+    font-weight: 850;
+    color: var(--drv-blue);
+    letter-spacing: -0.02em;
+}
+
+.drv-menu-id {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #1e40af;
+}
+
+/* Today's duty card */
+.drv-duty {
+    margin: 12px;
+    padding: 14px;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1.5px solid var(--drv-border);
+}
+
+.drv-duty.is-new {
+    border-color: #fb923c;
+    box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.15);
+}
+
+.drv-duty-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.drv-duty-title {
+    font-size: 1rem;
+    font-weight: 850;
+    color: var(--drv-text);
+}
+
+.drv-duty-date {
+    margin-top: 2px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--drv-muted);
+}
+
+.drv-duty-badge {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #c2410c;
+    background: #ffedd5;
+    border-radius: 999px;
+    padding: 3px 9px;
+}
+
+.drv-duty-badge[hidden],
+.drv-duty-changed[hidden] {
+    display: none;
+}
+
+.drv-duty-changed {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.drv-duty-item {
+    padding: 10px 0;
+    border-top: 1px solid #f1f5f9;
+}
+
+.drv-duty-label {
+    margin-bottom: 6px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--drv-muted);
+}
+
+.drv-duty-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.drv-duty-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--duty-color, var(--drv-blue));
+    color: #ffffff;
+}
+
+.drv-duty-icon.route {
+    background: color-mix(in srgb, var(--duty-color, var(--drv-blue)) 14%, #ffffff);
+    color: var(--duty-color, var(--drv-blue));
+}
+
+.drv-duty-icon .drv-ico {
+    width: 22px;
+    height: 22px;
+}
+
+.drv-duty-text {
+    min-width: 0;
+}
+
+.drv-duty-main {
+    font-size: 1.05rem;
+    font-weight: 850;
+    color: var(--drv-text);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.drv-duty-meta {
+    margin-top: 2px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+/* Your bus / All buses */
+.drv-views {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 0 12px 10px;
+    padding: 4px;
+    background: #f1f5f9;
+    border-radius: 14px;
+}
+
+.drv-view-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 6px;
+    border: none;
+    border-radius: 11px;
+    background: transparent;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.drv-view-btn.active {
+    background: #ffffff;
+    color: var(--drv-blue);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.drv-gps-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 16px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--drv-muted);
+}
+
+.drv-gps-state.on { color: #059669; }
+.drv-gps-state.off { color: #dc2626; }
+
+.drv-gps-retry {
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.drv-gps-retry[hidden] {
+    display: none;
+}
+
+.drv-logout {
+    display: block;
+    width: calc(100% - 24px);
+    margin: 0 12px 12px;
+    padding: 11px;
+    border-radius: 12px;
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    color: #dc2626;
+    font-size: 0.88rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+/* GPS problem banner */
+.drv-banner {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 90;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.4;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3);
+}
+
+.drv-banner[hidden] {
+    display: none;
+}
+
+/* Map pieces */
+.gmap-layer-selector {
+    display: none !important;   /* driver map: nothing but the map and the bus icon */
+}
+
+.gmap-dest-marker-wrap {
+    background: transparent;
+    border: none;
+}
+
+.gmap-dest-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px 4px 6px;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.35);
+    border: 2px solid #ffffff;
+}
+
+.gmap-bus-container .gmap-bus-body {
+    background: var(--bus-color, #0866ff);
+    font-size: 0;
+}
+
+.gmap-bus-container .gmap-bus-pulse-ring {
+    border-color: var(--bus-color, #0866ff);
+}
+
+.gmap-bus-container .gmap-bus-heading-arrow {
+    border-bottom-color: var(--bus-color, #0866ff);
+}
+
+/* The driver's own bus is a little bigger */
+.gmap-bus-container.is-mine .gmap-bus-body {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 6px 16px rgba(15, 23, 42, 0.35);
+}
+
+.leaflet-control-attribution,
+.gmap-attrib-pill {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .drv-menu, .drv-menu.open, .drv-gps-dot.on {
+        transition: none;
+        animation: none;
+    }
+}
+
+
+/* ---- Online / Offline switch ---- */
+.drv-online-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 12px 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid var(--drv-border);
+}
+
+.drv-online-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.drv-online-title {
+    font-size: 0.95rem;
+    font-weight: 850;
+    color: #047857;
+}
+
+.drv-online-title.off {
+    color: #475569;
+}
+
+.drv-online-row .drv-gps-state {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.drv-gps-state.off-duty { color: var(--drv-muted); }
+
+.drv-switch {
+    position: relative;
+    flex-shrink: 0;
+    width: 54px;
+    height: 32px;
+    border-radius: 999px;
+    border: none;
+    background: #cbd5e1;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.drv-switch.on {
+    background: #10b981;
+}
+
+.drv-switch-knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+    transition: transform 0.2s ease;
+}
+
+.drv-switch.on .drv-switch-knob {
+    transform: translateX(22px);
+}
+
+.drv-switch:focus-visible {
+    outline: 3px solid rgba(8, 102, 255, 0.4);
+    outline-offset: 2px;
+}
+
+/* Offline: grey dot on the bus icon */
+.drv-gps-dot.off-duty {
+    background: #94a3b8;
+    animation: none;
+}
+
+/* Wider screens: a roomier menu */
+@media (min-width: 900px) {
+    .drv-icon-btn { top: 18px; left: 18px; }
+    .drv-menu { top: 82px; left: 18px; width: 340px; }
+    .drv-banner { left: auto; right: 18px; margin: 0; width: 420px; }
+}

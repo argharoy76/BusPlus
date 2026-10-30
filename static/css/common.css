@@ -1,0 +1,785 @@
+/*
+ * Khulna University Bus Tracker (BusPlus)
+ * Common Styles & Aesthetic Whitish Design System
+ */
+
+:root {
+    --bg-primary: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-surface-elevated: #ffffff;
+    --bg-muted: #f1f5f9;
+    --border-subtle: #e2e8f0;
+    --border-focus: #cbd5e1;
+    
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    
+    --brand-primary: #1e40af;       /* University Deep Blue */
+    --brand-primary-light: #3b82f6; /* Bright Blue */
+    --brand-primary-soft: #eff6ff;  /* Soft Blue Tint */
+    
+    --accent-emerald: #059669;      /* Success / Active */
+    --accent-emerald-soft: #ecfdf5;
+    --accent-amber: #d97706;        /* Warning / Approaching */
+    --accent-amber-soft: #fffbeb;
+    --accent-rose: #e11d48;         /* Danger / Critical */
+    --accent-rose-soft: #fff1f2;
+    
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+    
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+    
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Whitish layout container */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Clean Header Navbar */
+.main-navbar {
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-subtle);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 0.75rem 1.5rem;
+}
+
+.navbar-inner {
+    max-width: 1300px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.brand-logo-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, #1e40af, #2563eb);
+    color: white;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+}
+
+.brand-text h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.brand-text span.uni-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    background-color: var(--brand-primary-soft);
+    color: var(--brand-primary);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-full);
+    border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.brand-text p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.nav-link {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.5rem 0.85rem;
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+}
+
+.nav-link:hover {
+    color: var(--brand-primary);
+    background-color: var(--bg-muted);
+}
+
+.nav-link.active {
+    color: var(--brand-primary);
+    background-color: var(--brand-primary-soft);
+    font-weight: 600;
+}
+
+/* Whitish Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.55rem 1.15rem;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    text-decoration: none;
+    line-height: 1.25;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-primary {
+    background-color: var(--brand-primary);
+    color: #ffffff;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+    background-color: #1d4ed8;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
+}
+
+.btn-secondary {
+    background-color: #ffffff;
+    color: var(--text-primary);
+    border-color: var(--border-subtle);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-muted);
+    border-color: var(--border-focus);
+}
+
+.btn-emerald {
+    background-color: var(--accent-emerald);
+    color: #ffffff;
+}
+
+.btn-emerald:hover {
+    background-color: #047857;
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+}
+
+.btn-amber {
+    background-color: var(--accent-amber);
+    color: #ffffff;
+}
+
+.btn-rose {
+    background-color: var(--accent-rose);
+    color: #ffffff;
+}
+
+.btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+}
+
+.btn-lg {
+    padding: 0.75rem 1.75rem;
+    font-size: 1rem;
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+}
+
+/* Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.65rem;
+    border-radius: var(--radius-full);
+}
+
+.badge-live {
+    background-color: #dcfce7;
+    color: #15803d;
+    border: 1px solid rgba(22, 101, 52, 0.2);
+}
+
+.badge-live::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background-color: #16a34a;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.3);
+    animation: pulse 1.8s infinite;
+}
+
+.badge-offline {
+    background-color: #f1f5f9;
+    color: #64748b;
+    border: 1px solid var(--border-subtle);
+}
+
+.badge-warning {
+    background-color: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+/* Card Styles */
+.card-whitish {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card-whitish:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-focus);
+}
+
+/* Toast Alerts Container */
+#toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 420px;
+    pointer-events: none;
+}
+
+.toast {
+    background-color: #ffffff;
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-subtle);
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.toast-warning {
+    border-left: 5px solid var(--accent-amber);
+    background-color: #ffffff;
+}
+
+.toast.toast-critical {
+    border-left: 5px solid var(--accent-rose);
+    background-color: #fffafb;
+}
+
+.toast.toast-success {
+    border-left: 5px solid var(--accent-emerald);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Modal styling */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-card {
+    background: #ffffff;
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 520px;
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-subtle);
+    padding: 1.75rem;
+    transform: translateY(10px);
+    transition: transform 0.2s ease;
+}
+
+.modal-overlay.active .modal-card {
+    transform: translateY(0);
+}
+
+/* Footer */
+.main-footer {
+    margin-top: auto;
+    background-color: #ffffff;
+    border-top: 1px solid var(--border-subtle);
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.825rem;
+}
+
+/* ==========================================================================
+   Modern Real Google Maps Engine Styling
+   ========================================================================== */
+
+/* Modern Floating Google Maps Layer Switcher */
+.gmap-layer-selector {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 400;
+    display: flex;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 9999px;
+    padding: 3px;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.12);
+    gap: 3px;
+}
+
+.gmap-layer-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+}
+
+.gmap-layer-btn.active {
+    background: #0866ff;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(8, 102, 255, 0.35);
+}
+
+.gmap-layer-btn:hover:not(.active) {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+/* Custom 3D Vehicle / Bus Marker with Pulse Waves & Directional Heading */
+.gmap-bus-container {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gmap-bus-pulse-ring {
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid rgba(8, 102, 255, 0.65);
+    animation: gmapPulse 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    pointer-events: none;
+}
+
+.gmap-bus-pulse-ring.idle {
+    display: none;
+}
+
+@keyframes gmapPulse {
+    0% {
+        transform: scale(0.7);
+        opacity: 0.9;
+    }
+    100% {
+        transform: scale(2.2);
+        opacity: 0;
+    }
+}
+
+.gmap-bus-body {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1877f2 0%, #0866ff 100%);
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 4px 14px rgba(8, 102, 255, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 18px;
+    position: relative;
+    z-index: 2;
+    transition: transform 0.4s ease;
+}
+
+.gmap-bus-heading-arrow {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 7px solid #0866ff;
+    filter: drop-shadow(0 -1px 2px rgba(0,0,0,0.25));
+}
+
+.gmap-bus-speed-tag {
+    position: absolute;
+    bottom: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 6px;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    z-index: 3;
+}
+
+/* Stop Marker Pins */
+.gmap-stop-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+}
+
+.gmap-stop-pin {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #2563eb;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    color: #1e40af;
+    transition: transform 0.2s ease;
+}
+
+.gmap-stop-wrapper:hover .gmap-stop-pin {
+    transform: scale(1.15);
+}
+
+.gmap-stop-label {
+    position: absolute;
+    bottom: 27px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 9999px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #1e293b;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+    pointer-events: none;
+    letter-spacing: -0.01em;
+    user-select: none;
+    display: none; /* Hidden when zoomed out, matching Google Maps strategy */
+    transition: opacity 0.2s ease;
+}
+
+/* When zoomed in close (zoom >= 15), reveal stop labels naturally alongside street names */
+.gmap-zoomed-in .gmap-stop-label {
+    display: block;
+}
+
+/* Target boarding stop, KU campus, and hovered stops remain visible at all zoom levels */
+.gmap-stop-wrapper.target-stop .gmap-stop-label,
+.gmap-stop-wrapper.ku-campus .gmap-stop-label,
+.gmap-stop-wrapper:hover .gmap-stop-label {
+    display: block !important;
+}
+
+.gmap-stop-wrapper.target-stop .gmap-stop-pin {
+    background: #10b981;
+    border-color: #ffffff;
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.35), 0 4px 14px rgba(16, 185, 129, 0.5);
+    animation: targetStopPulse 1.8s infinite;
+}
+
+.gmap-stop-wrapper.target-stop .gmap-stop-label {
+    background: #10b981;
+    color: #ffffff;
+    border-color: #059669;
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.45);
+    font-weight: 800;
+    bottom: 29px;
+}
+
+@keyframes targetStopPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.18);
+    }
+}
+
+.gmap-ku-campus-pin {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1e3a8a, #0f172a);
+    border: 2.5px solid #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35), 0 4px 14px rgba(15, 23, 42, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: #ffffff;
+    cursor: pointer;
+}
+
+/* Student Live GPS Beacon Pin */
+.gmap-student-beacon {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gmap-student-beacon-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #0284c7;
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.5);
+    z-index: 2;
+}
+
+.gmap-student-beacon-wave {
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: rgba(2, 132, 199, 0.3);
+    animation: gmapStudentPulse 1.8s ease-out infinite;
+    z-index: 1;
+}
+
+@keyframes gmapStudentPulse {
+    0% { transform: scale(0.6); opacity: 1; }
+    100% { transform: scale(2.0); opacity: 0; }
+}
+
+/* Modern Google Maps Popup Card */
+.leaflet-popup-content-wrapper {
+    background: rgba(255, 255, 255, 0.96) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08) !important;
+    border: 1px solid rgba(226, 232, 240, 0.85) !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+.leaflet-popup-content {
+    margin: 12px 14px !important;
+    line-height: 1.4 !important;
+}
+
+.leaflet-popup-tip {
+    background: #ffffff !important;
+    box-shadow: 0 3px 14px rgba(0,0,0,0.15) !important;
+}
+
+.gmap-card-popup {
+    font-family: var(--font-sans);
+}
+
+.gmap-card-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.gmap-card-title {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+}
+
+.gmap-badge-live {
+    background: #ecfdf5;
+    color: #059669;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    border: 1px solid #a7f3d0;
+}
+
+.gmap-card-metric {
+    font-size: 0.775rem;
+    color: #475569;
+    margin: 3px 0;
+}
+
+/* Important Places & Mores Milestone Badges */
+.gmap-milestone-badge-wrap {
+    background: transparent !important;
+    border: none !important;
+}
+
+.gmap-milestone-badge {
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1.5px solid #2563eb;
+    border-radius: 9999px;
+    padding: 3px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+    font-size: 11px;
+    font-weight: 800;
+    color: #0f172a;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: translate(-50%, -50%);
+    user-select: none;
+    letter-spacing: -0.01em;
+}
+
+.gmap-milestone-badge:hover {
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3);
+    border-color: #1d4ed8;
+}
+
+.gmap-milestone-badge.target-active {
+    background: #10b981;
+    border-color: #ffffff;
+    color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.35), 0 6px 18px rgba(16, 185, 129, 0.5);
+    animation: milestoneTargetPulse 1.8s infinite;
+}
+
+@keyframes milestoneTargetPulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+}
+
+.gmap-milestone-badge.ku-campus {
+    background: linear-gradient(135deg, #1e3a8a, #0f172a);
+    border-color: #f59e0b;
+    color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35), 0 4px 14px rgba(15, 23, 42, 0.4);
+}
+
+.gmap-milestone-badge.pti-mor {
+    border-color: #0866ff;
+    background: #ffffff;
+}
+
+.gmap-milestone-badge.malabotha-mor {
+    border-color: #059669;
+}
+
+

@@ -1,0 +1,511 @@
+/**
+ * Khulna University Bus Tracker (BusPlus)
+ * Driver app: full-screen map, GPS on automatically, one bus icon with a menu
+ *   - "Your bus": only this driver's bus (and its route + trail)
+ *   - "All buses": every route and every live bus (with their trails)
+ *   - Today's duty: which bus to drive on which route (set daily by the admin)
+ */
+
+class DriverApp {
+    constructor() {
+        const data = window.DRIVER_DATA || {};
+        this.driver = data.driver || {};
+        this.bus = data.bus || {};
+        this.routes = data.routes || [];
+        this.allBuses = [];
+
+        this.view = this.readSetting("busplus_driver_view", "mine"); // "mine" | "all"
+        this.online = this.readSetting("busplus_driver_online", "1") === "1";   // driver's Online/Offline switch
+        this.pendingFix = null;      // newest GPS fix waiting while the previous one is still being sent
+        this.streamLive = false;
+        this.follow = true;          // keep the own bus in view until the driver pans the map
+        this.watchId = null;
+        this.lastSent = { t: 0, lat: null, lng: null };
+        this.sending = false;
+        this.wakeLock = null;
+        this.pollTimer = null;
+        this.dutyTimer = null;
+        this.duty = null;
+        this.firstFit = true;
+
+        this.el = {
+            icon: document.getElementById("drv-icon"),
+            menu: document.getElementById("drv-menu"),
+            backdrop: document.getElementById("drv-backdrop"),
+            gpsDot: document.getElementById("drv-gps-dot"),
+            unseenDot: document.getElementById("drv-unseen-dot"),
+            gpsState: document.getElementById("drv-gps-state"),
+            gpsRetry: document.getElementById("drv-gps-retry"),
+            onlineSwitch: document.getElementById("drv-online-switch"),
+            onlineTitle: document.getElementById("drv-online-title"),
+            banner: document.getElementById("drv-banner"),
+            logout: document.getElementById("drv-logout"),
+            duty: document.getElementById("drv-duty"),
+            dutyBadge: document.getElementById("drv-duty-badge"),
+            dutyChanged: document.getElementById("drv-duty-changed"),
+            dutyDate: document.getElementById("drv-duty-date"),
+            dutyBus: document.getElementById("drv-duty-bus"),
+            dutyBusDot: document.getElementById("drv-duty-bus-dot"),
+            dutyPlate: document.getElementById("drv-duty-plate"),
+            dutyRoute: document.getElementById("drv-duty-route"),
+            dutyRouteSwatch: document.getElementById("drv-duty-route-swatch"),
+            dutyStops: document.getElementById("drv-duty-stops"),
+        };
+    }
+
+    readSetting(key, fallback) {
+        try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+    }
+
+    writeSetting(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+    }
+
+    async init() {
+        const helper = window.googleMapsHelper;
+        await helper.initMap("driver-map", {
+            center: {
+                lat: this.bus.current_latitude || 22.8021,
+                lng: this.bus.current_longitude || 89.5340
+            },
+            zoom: 14
+        });
+
+        helper.drawRoutes(this.routes);
+
+        // Panning by hand stops "follow my bus" until "Your bus" is chosen again
+        helper.leafletMap?.on("dragstart", () => { this.follow = false; });
+
+        this.bindMenu();
+        this.applyView(this.view, { fit: true });
+
+        this.renderOnline();
+        if (this.online) this.startGps();
+        else this.goOffline({ quiet: true });
+        this.loadDuty();
+        this.refreshBuses();
+        this.startLiveStream();
+        // Fallback only: while the live stream is connected, updates arrive instantly
+        this.pollTimer = setInterval(() => { if (!this.streamLive) this.refreshBuses(); }, 3000);
+        this.dutyTimer = setInterval(() => this.loadDuty(), 60000);
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") this.requestWakeLock();
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Menu
+    // ------------------------------------------------------------------
+    bindMenu() {
+        this.el.icon.addEventListener("click", () => this.toggleMenu());
+        this.el.backdrop.addEventListener("click", () => this.closeMenu());
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") this.closeMenu(); });
+
+        document.querySelectorAll(".drv-view-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                this.applyView(btn.dataset.view, { fit: true });
+                this.closeMenu();
+            });
+        });
+
+        this.el.gpsRetry.addEventListener("click", () => this.startGps());
+        this.el.onlineSwitch.addEventListener("click", () => this.setOnline(!this.online));
+        this.el.logout.addEventListener("click", () => this.logout());
+    }
+
+    toggleMenu() {
+        if (this.el.menu.classList.contains("open")) this.closeMenu();
+        else this.openMenu();
+    }
+
+    openMenu() {
+        this.el.menu.classList.add("open");
+        this.el.menu.setAttribute("aria-hidden", "false");
+        this.el.backdrop.classList.add("open");
+        this.el.icon.classList.add("menu-open");
+        this.el.icon.setAttribute("aria-expanded", "true");
+        this.markDutySeen();
+    }
+
+    closeMenu() {
+        this.el.menu.classList.remove("open");
+        this.el.menu.setAttribute("aria-hidden", "true");
+        this.el.backdrop.classList.remove("open");
+        this.el.icon.classList.remove("menu-open");
+        this.el.icon.setAttribute("aria-expanded", "false");
+    }
+
+    // ------------------------------------------------------------------
+    // Your bus / All buses
+    // ------------------------------------------------------------------
+    applyView(view, { fit = false } = {}) {
+        this.view = view === "all" ? "all" : "mine";
+        this.writeSetting("busplus_driver_view", this.view);
+        if (this.view === "mine") this.follow = true;
+
+        document.querySelectorAll(".drv-view-btn").forEach(btn => {
+            const on = btn.dataset.view === this.view;
+            btn.classList.toggle("active", on);
+            btn.setAttribute("aria-checked", on ? "true" : "false");
+        });
+
+        const helper = window.googleMapsHelper;
+        this.lastShownRoutes = null;
+        this.drawBuses();
+
+        if (!fit) return;
+        if (this.view === "mine") {
+            if (this.bus.is_active && this.bus.current_latitude) {
+                helper.fitToPoints([[this.bus.current_latitude, this.bus.current_longitude]], 40);
+            } else {
+                helper.fitToPoints(helper.getRoutePoints(this.bus.assigned_route_id ? [this.bus.assigned_route_id] : null), 40);
+            }
+        } else {
+            helper.fitToPoints(helper.getRoutePoints(null), 40);
+        }
+    }
+
+    /** Route lines: only for routes with a bus online (your own route while you are online). */
+    shownRouteIds() {
+        const mine = this.bus.assigned_route_id;
+        if (this.view === "mine") return this.online && mine ? [mine] : [];
+        const live = new Set(this.allBuses.filter(b => b.is_active).map(b => b.assigned_route_id));
+        if (this.online && mine) live.add(mine);
+        return [...live];
+    }
+
+    drawBuses() {
+        const helper = window.googleMapsHelper;
+        const myId = this.bus.bus_id;
+        let list = this.allBuses.filter(b => b.is_active);
+        if (this.view === "mine") list = list.filter(b => b.bus_id === myId);
+
+        const shown = this.shownRouteIds().sort().join(",");
+        if (shown !== this.lastShownRoutes) {
+            this.lastShownRoutes = shown;
+            helper.showRoutes(shown ? shown.split(",") : []);
+        }
+
+        helper.updateTrails(list);
+        helper.updateActiveBuses(list);
+
+        // Make the driver's own bus stand out
+        const mine = helper.markers[myId];
+        const el = mine && mine.getElement ? mine.getElement() : null;
+        el?.querySelector(".gmap-bus-container")?.classList.add("is-mine");
+    }
+
+    startLiveStream() {
+        if (!window.EventSource) return;
+        const es = new EventSource("/api/buses/stream");
+        es.onopen = () => { this.streamLive = true; };
+        es.onerror = () => { this.streamLive = false; };
+        es.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (Array.isArray(data.buses)) { this.streamLive = true; this.handleBuses(data.buses); }
+            } catch (err) { /* ignore a bad message */ }
+        };
+    }
+
+    async refreshBuses() {
+        try {
+            const resp = await fetch("/api/buses");
+            const data = await resp.json();
+            if (data.success) this.handleBuses(data.buses || []);
+        } catch (err) {
+            // network blip: try again on the next tick
+        }
+    }
+
+    handleBuses(buses) {
+        try {
+            this.allBuses = buses;
+            const mine = this.allBuses.find(b => b.bus_id === this.bus.bus_id);
+            if (mine) {
+                const routeChanged = mine.assigned_route_id !== this.bus.assigned_route_id;
+                this.bus = mine;
+                if (routeChanged) {
+                    this.applyView(this.view, { fit: this.view === "mine" });
+                    this.loadDuty();
+                    return;
+                }
+            }
+            this.drawBuses();
+            if (this.view === "mine" && this.follow && this.bus.is_active && this.bus.current_latitude && this.firstFit) {
+                window.googleMapsHelper.fitToPoints([[this.bus.current_latitude, this.bus.current_longitude]], 40);
+                this.firstFit = false;
+            }
+        } catch (err) {
+            // keep the last good picture
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // GPS (turns on by itself)
+    // ------------------------------------------------------------------
+    setGpsState(state, text) {
+        this.el.gpsDot.className = `drv-gps-dot ${state}`;
+        this.el.gpsState.className = `drv-gps-state ${state}`;
+        this.el.gpsState.textContent = text;
+        this.el.gpsRetry.hidden = state !== "off";
+    }
+
+    showBanner(text) {
+        this.el.banner.textContent = text;
+        this.el.banner.hidden = !text;
+    }
+
+    async startGps() {
+        if (!this.online) return;
+        if (!window.isSecureContext) {
+            this.setGpsState("off", "GPS needs HTTPS");
+            this.showBanner("GPS can't start: phones only share location with sites opened over HTTPS (or on this computer as localhost).");
+            return;
+        }
+        if (!navigator.geolocation) {
+            this.setGpsState("off", "No GPS on this device");
+            this.showBanner("This device or browser can't share its location.");
+            return;
+        }
+
+        this.setGpsState("", "Starting GPS…");
+        this.showBanner("");
+
+        const started = await this.post("/api/driver/trip/start", {});
+        if (!started) return;
+
+        if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+        this.watchId = navigator.geolocation.watchPosition(
+            (pos) => this.onPosition(pos),
+            (err) => this.onGpsError(err),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }   // always a fresh fix
+        );
+        this.requestWakeLock();
+    }
+
+    onPosition(pos) {
+        if (!this.online) return;
+        const { latitude, longitude, speed, heading } = pos.coords;
+        this.setGpsState("on", "GPS on · sharing location");
+        this.showBanner("");
+
+        const fix = {
+            latitude,
+            longitude,
+            // Many phones don't report speed: send null and the server works it out from the movement
+            speed_kmh: typeof speed === "number" && !Number.isNaN(speed) ? speed * 3.6 : null,
+            // Only send a heading the phone actually knows; otherwise the server works it out
+            heading_deg: typeof heading === "number" && !Number.isNaN(heading) ? heading : null
+        };
+
+        // Send every fix about once a second (sooner when the bus has moved 8 m+).
+        // If one is still on its way, keep only the newest and send it right after.
+        if (this.sending) { this.pendingFix = fix; return; }
+        const now = Date.now();
+        const moved = this.lastSent.lat === null ? Infinity
+            : Math.hypot(latitude - this.lastSent.lat, (longitude - this.lastSent.lng) * Math.cos(latitude * Math.PI / 180)) * 111000;
+        if (now - this.lastSent.t < 1000 && moved < 8) {
+            this.pendingFix = fix;
+            clearTimeout(this.pendingTimer);
+            this.pendingTimer = setTimeout(() => this.flushPending(), 1000 - (now - this.lastSent.t));
+            return;
+        }
+        this.sendFix(fix);
+    }
+
+    sendFix(fix) {
+        this.lastSent = { t: Date.now(), lat: fix.latitude, lng: fix.longitude };
+        this.sending = true;
+        this.pendingFix = null;
+        this.post("/api/driver/location", fix).then(data => {
+            if (data && data.bus) {
+                this.bus = { ...this.bus, ...data.bus };
+                const idx = this.allBuses.findIndex(b => b.bus_id === data.bus.bus_id);
+                if (idx >= 0) this.allBuses[idx] = { ...this.allBuses[idx], ...data.bus };
+                else this.allBuses.push(data.bus);
+                this.drawBuses();
+                this.followMyBus();
+            }
+            this.flushPending();
+        });
+    }
+
+    flushPending() {
+        if (this.pendingFix && !this.sending && this.online) this.sendFix(this.pendingFix);
+    }
+
+    followMyBus() {
+        if (this.view === "mine" && this.follow && this.bus.is_active && this.bus.current_latitude) {
+            window.googleMapsHelper.leafletMap?.panTo([this.bus.current_latitude, this.bus.current_longitude], { animate: true, duration: 0.8 });
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Online / Offline
+    // ------------------------------------------------------------------
+    renderOnline() {
+        const on = this.online;
+        this.el.onlineSwitch.classList.toggle("on", on);
+        this.el.onlineSwitch.setAttribute("aria-checked", on ? "true" : "false");
+        this.el.onlineSwitch.setAttribute("aria-label", on ? "Online. Tap to go offline" : "Offline. Tap to go online");
+        this.el.onlineTitle.textContent = on ? "You are online" : "You are offline";
+        this.el.onlineTitle.classList.toggle("off", !on);
+    }
+
+    setOnline(on) {
+        this.online = !!on;
+        this.writeSetting("busplus_driver_online", this.online ? "1" : "0");
+        this.renderOnline();
+        if (this.online) this.startGps();
+        else this.goOffline();
+        this.lastShownRoutes = null;
+        this.drawBuses();
+    }
+
+    /** Stops sharing location; the bus disappears from students' maps. */
+    async goOffline({ quiet = false } = {}) {
+        if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+        this.watchId = null;
+        this.pendingFix = null;
+        clearTimeout(this.pendingTimer);
+        this.showBanner("");
+        this.setGpsState("off-duty", "Not sharing location");
+        // Let a location update that's already on its way land first, so it can't switch the bus back on
+        for (let i = 0; i < 30 && this.sending; i++) await new Promise(r => setTimeout(r, 100));
+        if (!quiet || this.bus.is_active) await this.post("/api/driver/trip/stop", {});
+        try { await this.wakeLock?.release(); } catch (e) {}
+    }
+
+    onGpsError(err) {
+        if (err.code === 1) {
+            this.setGpsState("off", "Location blocked");
+            this.showBanner("Location is blocked for BusPlus. Allow location in your browser settings, then tap the bus icon → Turn on.");
+            if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+            this.watchId = null;
+        } else if (err.code === 3) {
+            this.setGpsState("", "Waiting for GPS signal…");
+        } else {
+            this.setGpsState("off", "GPS unavailable");
+            this.showBanner("Can't get a GPS position right now. Move to an open area and tap the bus icon → Turn on.");
+        }
+    }
+
+    async requestWakeLock() {
+        // Keeps the screen (and GPS) awake while driving, where the browser supports it
+        try {
+            if ("wakeLock" in navigator && document.visibilityState === "visible" && !this.wakeLock) {
+                this.wakeLock = await navigator.wakeLock.request("screen");
+                this.wakeLock.addEventListener("release", () => { this.wakeLock = null; });
+            }
+        } catch (e) { /* not allowed right now */ }
+    }
+
+    // ------------------------------------------------------------------
+    // Today's duty (notification)
+    // ------------------------------------------------------------------
+    async loadDuty() {
+        try {
+            const resp = await fetch("/api/driver/assignment");
+            if (resp.status === 401) return this.sessionLost();
+            const data = await resp.json();
+            if (!data.success) return;
+            this.duty = data.assignment;
+            this.renderDuty();
+        } catch (e) { /* try again later */ }
+    }
+
+    renderDuty() {
+        const d = this.duty;
+        if (!d) return;
+        this.el.dutyDate.textContent = d.date_label || "";
+
+        // Bus: its name big, then "Bus no. … · Plate …"
+        this.el.dutyBus.textContent = d.bus_number ? (d.bus_name || d.bus_number) : "No bus assigned yet";
+        const busFacts = [];
+        if (d.bus_number) busFacts.push(/bus/i.test(d.bus_number) ? d.bus_number : `Bus no. ${d.bus_number}`);
+        if (d.license_plate) busFacts.push(`Plate ${d.license_plate}`);
+        this.el.dutyPlate.textContent = d.bus_number ? busFacts.join(" · ") : "Ask the admin to assign you a bus.";
+        this.el.dutyBusDot.style.setProperty("--duty-color", d.bus_color || "#94a3b8");
+
+        // Route: its name big, then where it goes
+        this.el.dutyRoute.textContent = d.route_name || "No route assigned yet";
+        this.el.dutyRouteSwatch.style.setProperty("--duty-color", d.route_color || "#94a3b8");
+        if (!d.route_name) {
+            this.el.dutyStops.textContent = "";
+        } else if (d.from_stop) {
+            this.el.dutyStops.textContent = `From ${d.from_stop}${d.from_time ? ` at ${d.from_time}` : ""} to 🏁 ${d.to_stop}`;
+        } else {
+            this.el.dutyStops.textContent = `Ends at 🏁 ${d.to_stop}`;
+        }
+
+        const changed = !!d.changed_today;
+        this.el.dutyBadge.hidden = !changed;
+        if (this.el.dutyChanged) this.el.dutyChanged.hidden = !changed;
+        this.el.duty.classList.toggle("is-new", !!d.unseen);
+        this.el.unseenDot.hidden = !d.unseen;
+        if (d.unseen && this.el.menu.classList.contains("open")) this.markDutySeen();
+    }
+
+    async markDutySeen() {
+        if (!this.duty || !this.duty.unseen) return;
+        this.el.unseenDot.hidden = true;
+        await this.post("/api/driver/assignment/seen", {});
+        this.duty.unseen = false;
+    }
+
+    // ------------------------------------------------------------------
+    // Session
+    // ------------------------------------------------------------------
+    async post(url, body) {
+        try {
+            const resp = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body || {})
+            });
+            if (resp.status === 401 || resp.status === 409) {
+                this.sessionLost();
+                return null;
+            }
+            const data = await resp.json().catch(() => ({}));
+            if (resp.status === 404 && data.message) {
+                this.setGpsState("off", "No bus assigned");
+                this.showBanner(data.message);
+                return null;
+            }
+            return data;
+        } catch (e) {
+            return null;   // offline for a moment; the next GPS fix will retry
+        } finally {
+            if (url === "/api/driver/location") this.sending = false;
+        }
+    }
+
+    sessionLost() {
+        if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+        window.location.href = "/driver/login";
+    }
+
+    async logout() {
+        if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+        this.watchId = null;
+        clearInterval(this.pollTimer);
+        clearInterval(this.dutyTimer);
+        try { await this.wakeLock?.release(); } catch (e) {}
+        try {
+            await fetch("/api/auth/logout", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: "{}"
+            });
+        } catch (e) {}
+        window.location.href = "/";
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    window.driverApp = new DriverApp();
+    window.driverApp.init();
+});

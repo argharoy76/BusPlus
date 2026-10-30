@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}BusPlus - Khulna University{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
+
+{% block content %}
+<!-- Ambient Floating Glowing Orbs Background -->
+<div class="ambient-background">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+</div>
+
+<!-- Fluid Mobile Fullscreen Layout -->
+<div class="mobile-fullscreen-view">
+    <!-- Center Hero Branding with Animated Radar Pulse -->
+    <div class="brand-hero-section">
+        <div class="floating-logo-stage">
+            <div class="pulse-ring"></div>
+            <div class="pulse-ring delay-1"></div>
+            <div class="pulse-ring delay-2"></div>
+            <div class="floating-bus-badge">🚌</div>
+        </div>
+
+        <h1 class="app-brand-title">BusPlus</h1>
+        <span class="app-brand-badge">Khulna University</span>
+    </div>
+
+    <!-- Fluid Action Buttons -->
+    <div class="fluid-actions-stack">
+        <!-- Option 1: Driver -->
+        <a href="/driver/login" class="fluid-touch-btn btn-driver">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="btn-icon-wrapper">👨‍✈️</div>
+                <span>Driver</span>
+            </div>
+            <div class="btn-arrow-pill">›</div>
+        </a>
+
+        <!-- Option 2: Student -->
+        <a href="/student/login" id="landing-student-btn" class="fluid-touch-btn btn-student">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="btn-icon-wrapper">🎓</div>
+                <span>Student</span>
+            </div>
+            <div class="btn-arrow-pill">›</div>
+        </a>
+
+        <!-- Option 3: Teacher -->
+        <a href="/teacher/login" id="landing-teacher-btn" class="fluid-touch-btn btn-teacher">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="btn-icon-wrapper">👩‍🏫</div>
+                <span>Teacher</span>
+            </div>
+            <div class="btn-arrow-pill">›</div>
+        </a>
+    </div>
+</div>
+{% endblock %}

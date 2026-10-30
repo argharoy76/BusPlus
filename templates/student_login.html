@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ portal_info.label }} Login - BusPlus{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+<style>
+    .fluid-question-label {
+        display: block;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 0.45rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Ambient Background -->
+<div class="ambient-background">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-3"></div>
+</div>
+
+<!-- Fluid Mobile Screen -->
+<div class="mobile-fullscreen-view" style="justify-content: flex-start;">
+    <!-- Top Navigation Header -->
+    <div class="mobile-nav-header">
+        <a href="/" class="fluid-back-btn" title="Back">
+            ←
+        </a>
+        <h2 class="fluid-page-title">{{ portal_info.label }} Login</h2>
+        <div style="width: 44px;"></div>
+    </div>
+
+    <!-- Student Questions Form -->
+    <form id="student-login-form" class="fluid-form-container" style="margin-top: 1.5rem;">
+        <!-- Option 1: Student's Name -->
+        <div class="fluid-input-wrap" style="margin-bottom: 1.25rem;">
+            <label class="fluid-question-label" for="input-student-name">
+                {{ portal_info.label }}'s Name
+            </label>
+            <input type="text" id="input-student-name" class="fluid-input" placeholder="Enter your name" autocomplete="name" required autofocus>
+        </div>
+
+        <!-- Option 2: Student ID -->
+        <div class="fluid-input-wrap" style="margin-bottom: 1.75rem;">
+            <label class="fluid-question-label" for="input-student-id">
+                {{ portal_info.id_label }}
+            </label>
+            <input type="text" id="input-student-id" class="fluid-input" placeholder="Enter {{ portal_info.id_label | lower }}" autocomplete="off" required>
+        </div>
+
+        <!-- See Map Button -->
+        <button type="submit" class="fluid-submit-btn" style="{% if portal == 'teacher' %}background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); box-shadow: 0 12px 28px -6px rgba(124, 58, 237, 0.4);{% else %}background: var(--accent-emerald-gradient); box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.4);{% endif %}">
+            See Map →
+        </button>
+    </form>
+</div>
+
+<script>
+    const PORTAL = {{ portal | tojson }};               // "student" or "teacher"
+    const KEY_ID = `busplus_${PORTAL}_id`;
+    const KEY_NAME = `busplus_${PORTAL}_name`;
+    const form = document.getElementById("student-login-form");
+    const inputName = document.getElementById("input-student-name");
+    const inputId = document.getElementById("input-student-id");
+
+    // Pre-populate if previously entered, without auto-redirecting
+    try {
+        if (localStorage.getItem(KEY_NAME)) inputName.value = localStorage.getItem(KEY_NAME);
+        if (localStorage.getItem(KEY_ID)) inputId.value = localStorage.getItem(KEY_ID);
+    } catch (e) { /* private mode */ }
+
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fullName = inputName.value.trim();
+        const studentId = inputId.value.trim();
+
+        if (!fullName || !studentId) {
+            alert("Please enter your name and ID.");
+            return;
+        }
+
+        try {
+            const resp = await fetch(PORTAL === "teacher" ? "/api/auth/teacher/login" : "/api/auth/student/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    student_id: studentId,
+                    teacher_id: studentId,
+                    full_name: fullName,
+                    preferred_route_id: "KU-R01",
+                    preferred_stop: "Malabotha More",
+                    alert_lead_minutes: 5
+                })
+            });
+
+            const data = await resp.json();
+            if (data.success) {
+                // Save locally so student remains logged in anytime they return
+                try {
+                    localStorage.setItem(KEY_ID, studentId);
+                    localStorage.setItem(KEY_NAME, fullName);
+                } catch (e) { /* private mode */ }
+                window.location.href = data.redirect_url || `/${PORTAL}/dashboard`;
+            } else {
+                alert(data.message || "Login failed");
+            }
+        } catch (err) {
+            alert("Connection error: " + err.message);
+        }
+    });
+</script>
+{% endblock %}
