@@ -317,16 +317,6 @@ select {
     color: var(--text-dark);
 }
 
-/* Current setting under each row, e.g. "5 min before · 1 time" */
-.side-option-sub {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .side-option-chevron {
     font-size: 1.4rem;
     font-weight: 600;

@@ -293,8 +293,6 @@ class StudentTracker {
         this.audioCtx = null;
 
         // Menu
-        this.sideHomeLabel = document.getElementById("side-current-home-label");
-        this.sideNotifLabel = document.getElementById("side-current-notif-label");
         this.sideFreqSelect = document.getElementById("side-frequency-select");
         this.customMinutesInput = document.getElementById("side-custom-minutes-input");
         this.minutesHint = document.getElementById("side-minutes-hint");
@@ -372,7 +370,6 @@ class StudentTracker {
 
     /** Fills the menu's inputs and summary lines from the saved settings (called when a menu page opens). */
     syncPreferencesUi() {
-        this.updateMenuSummaries();
         if (this.homeAddressInput) this.homeAddressInput.value = this.homeAddress;
         this.pendingHomePlace = null;
         this.hideHomeSuggestions();
@@ -384,19 +381,6 @@ class StudentTracker {
     /** Name shown for Home: the typed address if the rider entered one, otherwise the stop name. */
     getHomeDisplayName() {
         return this.homeAddress || this.homePosition;
-    }
-
-    /** Refreshes the small summary lines under "Home" and "Notification" in the main menu. */
-    updateMenuSummaries() {
-        if (this.sideHomeLabel) {
-            this.sideHomeLabel.textContent = this.getHomeDisplayName();
-        }
-        if (this.sideNotifLabel) {
-            const repeat = this.alertFrequency === "continuous" ? RT("Until the bus arrives")
-                : this.alertFrequency === "1" ? RT("Once")
-                : RT("{count} times", { count: this.alertFrequency });
-            this.sideNotifLabel.textContent = RT("{minutes} min before · {repeat}", { minutes: this.alertThresholdMinutes, repeat });
-        }
     }
 
     /** Unique stops across all routes, offered as Home address suggestions. */
@@ -668,7 +652,6 @@ class StudentTracker {
         if (this.homeAddress) settings.set("busplus_home_address", this.homeAddress);
         else settings.remove("busplus_home_address");
 
-        this.updateMenuSummaries();
         this.updateMinutesHint(this.alertThresholdMinutes);
         this.alertTriggerCount = 0;
         this.fetchLiveTrackingData();
@@ -686,7 +669,6 @@ class StudentTracker {
             this.customMinutesInput.value = this.alertThresholdMinutes;
         }
         this.updateMinutesHint(this.alertThresholdMinutes);
-        this.updateMenuSummaries();
         this.alertTriggerCount = 0;
         this.fetchLiveTrackingData();
     }
@@ -696,7 +678,6 @@ class StudentTracker {
         this.alertFrequency = freqVal;
         settings.set("busplus_alert_frequency", freqVal);
         this.alertTriggerCount = 0;
-        this.updateMenuSummaries();
         this.showToast(RT("Notification updated"), "toast-info");
     }
 

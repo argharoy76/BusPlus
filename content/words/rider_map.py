@@ -15,7 +15,6 @@ WORDS = {
     "Notification": "Notification",
     "Bus schedule": "Bus schedule",
     "Back": "Back",
-    "{minutes} min before · {repeat}": "{minutes} min before · {repeat}",   # grey line under "Notification"
 
     # ---- Menu > Home ----
     "Home address": "Home address",
