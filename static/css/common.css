@@ -11,7 +11,7 @@
     --border-subtle: #e2e8f0;
     --border-focus: #cbd5e1;
 
-    --text-primary: #0f172a;
+    --text-primary: var(--bp-text);
     --text-secondary: #475569;
     --text-muted: #94a3b8;
 
@@ -191,14 +191,14 @@ body {
 }
 
 .gmap-layer-btn.active {
-    background: #0866ff;
+    background: var(--bp-brand);
     color: #ffffff;
-    box-shadow: 0 2px 8px rgba(8, 102, 255, 0.35);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--bp-brand) 35%, transparent);
 }
 
 .gmap-layer-btn:hover:not(.active) {
     background: #f1f5f9;
-    color: #0f172a;
+    color: var(--bp-text);
 }
 
 .gmap-layer-ico {
@@ -234,7 +234,7 @@ body {
     position: absolute;
     inset: -6px;
     border-radius: 50%;
-    border: 2px solid var(--bus-color, #0866ff);
+    border: 2px solid var(--bus-color, var(--bp-brand));
     animation: gmapPulse 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
     pointer-events: none;
 }
@@ -248,9 +248,9 @@ body {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: var(--bus-color, #0866ff);
+    background: var(--bus-color, var(--bp-brand));
     border: 2.5px solid #ffffff;
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--bus-color, #0866ff) 45%, transparent);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--bus-color, var(--bp-brand)) 45%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -278,7 +278,7 @@ body {
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-bottom: 7px solid var(--bus-color, #0866ff);
+    border-bottom: 7px solid var(--bus-color, var(--bp-brand));
     filter: drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.25));
 }
 
@@ -287,7 +287,7 @@ body {
     bottom: -13px;
     left: 50%;
     transform: translateX(-50%);
-    background: #0f172a;
+    background: var(--bp-text);
     color: #ffffff;
     font-size: 9px;
     font-weight: 700;
@@ -380,7 +380,7 @@ body {
 .gmap-card-title {
     font-size: 0.95rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--bp-text);
     margin: 0;
 }
 
@@ -413,7 +413,7 @@ body {
     align-items: center;
     justify-content: center;
     flex: none;
-    background: #0866ff;
+    background: var(--bp-brand);
     border-radius: 28%;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
 }

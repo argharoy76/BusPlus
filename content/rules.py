@@ -34,6 +34,8 @@ TRAIL_MAX_POINTS = 1500
 # ---- Students / teachers ----------------------------------------------------
 # "Notify me N minutes before the bus arrives": the starting value.
 DEFAULT_ALERT_MINUTES = 5
+# The largest number of minutes a rider may type there.
+MAX_ALERT_MINUTES = 120
 
 # ---- Login protection (attempts allowed per IP address) ---------------------
 ADMIN_LOGIN_LIMIT = "5 per minute; 30 per hour"

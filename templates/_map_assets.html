@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 <script>
-    // Settings from the content/ folder (map_settings.py, rules.py, site_text.py)
+    // Settings from the content/ folder (map_settings.py, rules.py, colors.py)
     window.APP_CONFIG = Object.assign({ universityLocation: {{ map_center | tojson }} }, {{ map_config | tojson }});
 </script>
 <script src="{{ url_for('static', filename='js/google_maps_helper.js') }}"></script>

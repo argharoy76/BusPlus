@@ -1,0 +1,12 @@
+{# Shared <head> pieces: browser-tab icon and the colours from content/colors.py (THEME). #}
+<link rel="icon" href="{{ url_for('views.favicon') }}" type="image/svg+xml">
+<meta name="theme-color" content="{{ theme.brand }}">
+<style>
+    :root {
+        --bp-brand: {{ theme.brand }};
+        --bp-page-bg: {{ theme.page_background }};
+        --bp-text: {{ theme.text }};
+        --bp-muted: {{ theme.muted_text }};
+        --bp-danger: {{ theme.danger }};
+    }
+</style>

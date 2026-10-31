@@ -20,8 +20,10 @@ from datetime import datetime
 from flask import Blueprint, Response, session, stream_with_context
 
 from config import Config
+from content.words.bus_schedule import DAY_NAMES, MONTH_NAMES
 from controllers.helpers import audience_arg, driver_required, fail, json_body, ok, optional_float
-from services import geo, tracking, users
+from services import geo, schedule_service, tracking, users
+from services.words import say
 
 bus_bp = Blueprint("buses", __name__)
 
@@ -71,9 +73,9 @@ def driver_location(bus_id: str):
     data = json_body()
     latitude, longitude = optional_float(data.get("latitude")), optional_float(data.get("longitude"))
     if latitude is None or longitude is None:
-        return fail("Valid latitude and longitude are required.")
+        return fail(say("Valid latitude and longitude are required."))
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-        return fail("Latitude/longitude out of range.")
+        return fail(say("Latitude/longitude out of range."))
     bus = tracking.update_location(bus_id, latitude, longitude,
                                    speed_kmh=optional_float(data.get("speed_kmh")),
                                    heading_deg=optional_float(data.get("heading_deg")))
@@ -110,7 +112,8 @@ def driver_assignment(bus_id: str):
     unseen = bool(driver.assignment_updated_at) and (
         not driver.assignment_seen_at or driver.assignment_seen_at < driver.assignment_updated_at)
     return ok(assignment={
-        "date_label": geo.local_now().strftime("%A, %d %B"),
+        "date_label": say("{day}, {date} {month}", day=DAY_NAMES[schedule_service.today_key()],
+                          date=geo.local_now().day, month=MONTH_NAMES[geo.local_now().month - 1]),
         "bus_id": bus.bus_id,
         "bus_number": bus.bus_number,
         "bus_name": bus.bus_name,

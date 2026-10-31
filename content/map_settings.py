@@ -14,6 +14,9 @@ FINAL_DESTINATION = {
     "landmark_hint": "Khulna University · Hadi Chattar",
 }
 
+# A rider's Home stop before they choose their own (menu > Home on the student / teacher map).
+DEFAULT_HOME = {"stop_name": "Malabotha More", "latitude": 22.7725, "longitude": 89.5855}
+
 # Local time zone (used for "today" on the driver's duty card and arrival clock times).
 TIMEZONE = "Asia/Dhaka"
 

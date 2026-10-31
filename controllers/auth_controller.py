@@ -20,6 +20,7 @@ from extensions import limiter
 from models.rider_types import rider_info
 from services import store, tracking, users
 from services.user_service import LoginError, new_session_token
+from services.words import say
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -50,7 +51,7 @@ def admin_login():
     good_user = hmac.compare_digest(username.encode(), current_app.config["ADMIN_USERNAME"].encode())
     good_pass = hmac.compare_digest(password.encode(), expected_password.encode())
     if not (good_user and good_pass and expected_password):
-        return fail("Wrong username or password.", 401)
+        return fail(say("Wrong username or password."), 401)
     _start_fresh_session(keep_admin=False)
     session["is_admin"] = True
     return ok(redirect_url=url_for("admin.portal"))
@@ -89,7 +90,7 @@ def driver_login():
     data = json_body()
     name_or_id = str(data.get("driver_id") or data.get("driver_name") or "").strip()
     if not name_or_id:
-        return fail("Please enter or select your driver name.")
+        return fail(say("Please enter or select your driver name."))
 
     driver = users.find_driver(name_or_id)
     bus = tracking.get_bus(driver.assigned_bus_id) if driver else None
@@ -108,7 +109,7 @@ def driver_login():
 
     _start_fresh_session()
     session.update(role="driver", driver_id=driver.driver_id, session_token=token)
-    return ok(message=f"Welcome, {driver.full_name}", redirect_url=url_for("views.driver_dashboard"))
+    return ok(message=say("Welcome, {name}", name=driver.full_name), redirect_url=url_for("views.driver_dashboard"))
 
 
 # ---------------------------------------------------------------------------
@@ -123,17 +124,17 @@ def rider_login(rider_type: str):
     """
     info = rider_info(rider_type)
     if info is None:
-        return fail("Not found.", 404)
+        return fail(say("Not found."), 404)
     data = json_body()
     rider_id = str(data.get("rider_id") or data.get(f"{rider_type}_id") or "").strip()[:40]
     full_name = str(data.get("full_name") or "").strip()[:60]
     if not rider_id or not full_name:
-        return fail(f"Please enter your name and {info['id_label']}.")
+        return fail(say("Please enter your name and {id_label}.", id_label=info["id_label"]))
     store.record_rider(rider_type, rider_id, full_name)
     _start_fresh_session()
     session.permanent = True
     session.update(role=rider_type, rider_id=rider_id, rider_name=full_name)
-    return ok(message=f"Welcome, {full_name}",
+    return ok(message=say("Welcome, {name}", name=full_name),
               redirect_url=url_for("views.rider_dashboard", rider_type=rider_type))
 
 
@@ -151,4 +152,4 @@ def logout():
             tracking.stop_trip(driver.assigned_bus_id)
         users.sign_out(driver_id, token)
     _start_fresh_session()
-    return ok(message="Logged out.", redirect_url=url_for("views.landing"))
+    return ok(message=say("Logged out."), redirect_url=url_for("views.landing"))

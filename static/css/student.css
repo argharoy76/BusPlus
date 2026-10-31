@@ -6,10 +6,10 @@
  */
 
 :root {
-    --primary-blue: #0866ff;
-    --primary-blue-gradient: linear-gradient(135deg, #0866ff 0%, #1877f2 50%, #0052cc 100%);
-    --text-dark: #0f172a;
-    --text-muted: #64748b;
+    --primary-blue: var(--bp-brand);
+    --primary-blue-gradient: linear-gradient(135deg, var(--bp-brand) 0%, color-mix(in srgb, var(--bp-brand) 70%, #000) 100%);
+    --text-dark: var(--bp-text);
+    --text-muted: var(--bp-muted);
 }
 
 * {
@@ -121,7 +121,7 @@ select {
 .brand-name {
     font-size: 1.02rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--bp-text);
     letter-spacing: -0.02em;
 }
 
@@ -137,7 +137,7 @@ select {
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
     font-size: 0.8rem;
     font-weight: 700;
-    color: #dc2626;
+    color: var(--bp-danger);
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -391,7 +391,7 @@ select {
     background: #f8fafc;
     font-size: 0.85rem;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--bp-text);
     padding: 0 10px;
     outline: none;
     width: 100%;
@@ -399,7 +399,7 @@ select {
 
 .side-text-input:focus,
 .side-select-control:focus {
-    border-color: #0866ff;
+    border-color: var(--bp-brand);
     background: #ffffff;
 }
 
@@ -412,7 +412,7 @@ select {
     font-size: 0.9rem;
     font-weight: 800;
     cursor: pointer;
-    box-shadow: 0 6px 16px rgba(8, 102, 255, 0.28);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--bp-brand) 28%, transparent);
 }
 
 .side-save-btn:active {
@@ -502,9 +502,9 @@ select {
 }
 
 .side-minutes-box:focus-within {
-    border-color: #0866ff;
+    border-color: var(--bp-brand);
     background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(8, 102, 255, 0.12);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-brand) 12%, transparent);
 }
 
 .side-minutes-input {
@@ -550,7 +550,7 @@ select {
 }
 
 .side-minutes-hint.is-error {
-    color: #dc2626;
+    color: var(--bp-danger);
 }
 
 /* =====================================================================
@@ -572,7 +572,7 @@ select {
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
     font-size: 0.825rem;
     font-weight: 700;
-    color: #0866ff;
+    color: var(--bp-brand);
     cursor: pointer;
     transition: all 0.2s ease;
 }
@@ -588,9 +588,9 @@ select {
 
 /* GPS found */
 .phone-locate-fab.active {
-    background: #0866ff;
+    background: var(--bp-brand);
     color: #ffffff;
-    border-color: #0866ff;
+    border-color: var(--bp-brand);
 }
 
 .phone-map-app.sheet-dragging .phone-locate-fab {
@@ -650,7 +650,7 @@ select {
 
 .toast-icon {
     display: flex;
-    color: #0866ff;
+    color: var(--bp-brand);
 }
 
 .toast-title {
@@ -867,7 +867,7 @@ select {
     margin-bottom: 6px;
     font-size: 0.72rem;
     font-weight: 800;
-    color: #64748b;
+    color: var(--bp-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
@@ -885,20 +885,20 @@ select {
 }
 
 .route-search.has-route .route-search-box {
-    border-color: var(--route-color, #0866ff);
+    border-color: var(--route-color, var(--bp-brand));
     background: #ffffff;
 }
 
 .route-search-box:focus-within {
-    border-color: #0866ff;
+    border-color: var(--bp-brand);
     background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(8, 102, 255, 0.12);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-brand) 12%, transparent);
 }
 
 .route-search-icon {
     display: inline-flex;
     font-size: 0.9rem;
-    color: #64748b;
+    color: var(--bp-muted);
 }
 
 /* Colour bar of the picked route, inside the box */
@@ -906,7 +906,7 @@ select {
     width: 6px;
     height: 22px;
     border-radius: 999px;
-    background: var(--route-color, #0866ff);
+    background: var(--route-color, var(--bp-brand));
     flex-shrink: 0;
 }
 
@@ -1064,7 +1064,7 @@ select {
     height: 44px;
     flex-shrink: 0;
     border-radius: 13px;
-    background: var(--bus-color, #0866ff);
+    background: var(--bus-color, var(--bp-brand));
     color: #ffffff;
     display: flex;
     align-items: center;
@@ -1077,8 +1077,8 @@ select {
 }
 
 .sheet-bus-dot.is-offline {
-    background: color-mix(in srgb, var(--bus-color, #0866ff) 13%, #ffffff);
-    color: var(--bus-color, #0866ff);
+    background: color-mix(in srgb, var(--bus-color, var(--bp-brand)) 13%, #ffffff);
+    color: var(--bus-color, var(--bp-brand));
 }
 
 .sheet-bus-dot.is-live::after {
@@ -1105,7 +1105,7 @@ select {
 .sheet-row-title {
     font-size: 0.97rem;
     font-weight: 800;
-    color: #0f172a;
+    color: var(--bp-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "_ui.html" import logo, icon %}
+{% from "_ui.html" import logo, icon with context %}
+{% set t = words("login_pages") %}
 {# Sign-in page for every rider type (portal = its key, e.g. "student"; portal_info = its settings from content/user_types.py). #}
 
-{% block title %}{{ portal_info.label }} Login · {{ site.APP_NAME }}{% endblock %}
+{% block title %}{{ tab_title(t("{who} login", who=portal_info.label)) }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
@@ -11,24 +12,24 @@
 {% block content %}
 <div class="lp lp-form-page" style="--accent: {{ portal_info.color }}">
     <header class="lp-topbar">
-        <a href="{{ url_for('views.landing') }}" class="lp-back" aria-label="Back">{{ icon("back") }}</a>
+        <a href="{{ url_for('views.landing') }}" class="lp-back" aria-label="{{ t("Back") }}">{{ icon("back") }}</a>
         {{ logo("sm") }}
     </header>
 
-    <h1 class="lp-form-title">{{ portal_info.label }} login</h1>
+    <h1 class="lp-form-title">{{ t("{who} login", who=portal_info.label) }}</h1>
 
     <div id="login-error-box" class="lp-error" role="alert"></div>
 
     <form id="student-login-form" class="lp-form" novalidate>
         <label class="lp-field">
-            <span class="lp-label">Name</span>
-            <input type="text" id="input-student-name" class="lp-input" placeholder="{{ site.LOGIN_NAME_PLACEHOLDER }}" autocomplete="name" required autofocus>
+            <span class="lp-label">{{ t("Name") }}</span>
+            <input type="text" id="input-student-name" class="lp-input" placeholder="{{ t("Enter your name") }}" autocomplete="name" required autofocus>
         </label>
         <label class="lp-field">
             <span class="lp-label">{{ portal_info.id_label }}</span>
             <input type="text" id="input-student-id" class="lp-input" placeholder="{{ portal_info.id_label }}" autocomplete="off" required>
         </label>
-        <button type="submit" class="lp-submit">{{ site.LOGIN_BUTTON_TEXT }}</button>
+        <button type="submit" class="lp-submit">{{ t("See map") }}</button>
     </form>
 </div>
 
@@ -52,7 +53,7 @@
         const fullName = inputName.value.trim();
         const riderId = inputId.value.trim();
         if (!fullName || !riderId) {
-            showError("Please enter your name and ID.");
+            showError({{ t("Please enter your name and ID.") | tojson }});
             return;
         }
         try {
@@ -63,7 +64,7 @@
             });
             const data = await resp.json();
             if (!data.success) {
-                showError(data.message || "Login failed. Please try again.");
+                showError(data.message || {{ t("Login failed. Please try again.") | tojson }});
                 return;
             }
             // Remember name and ID on this phone so the form is filled in next time
@@ -73,7 +74,7 @@
             } catch (e) { /* private mode */ }
             window.location.href = data.redirect_url;
         } catch (err) {
-            showError("Connection error. Please check your internet and try again.");
+            showError({{ t("Connection error. Please check your internet and try again.") | tojson }});
         }
     });
 

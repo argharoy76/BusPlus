@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+{% set t = words("backend") %}
+{% from "_ui.html" import logo with context %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ site.APP_NAME }} Backend</title>
-    
+    <title>{{ t("{app} Backend", app=brand.APP_NAME) }}</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+    {% include "_theme.html" %}
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
@@ -23,28 +24,26 @@
         <aside class="admin-sidebar">
             <div>
                 <div class="admin-brand">
-                    <div style="width:38px; height:38px; background:#1e40af; color:#fff; border-radius:10px; display:flex; align-items:center; justify-content:center;">
-                        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>
-                    </div>
+                    {{ logo("sm") }}
                     <div>
-                        <div style="font-weight:800; font-size:1.05rem; color:#0f172a;">{{ site.APP_NAME }}</div>
-                        <div style="font-size:0.75rem; color:#64748b;">Backend</div>
+                        <div style="font-weight:800; font-size:1.05rem; color:#0f172a;">{{ brand.APP_NAME }}</div>
+                        <div style="font-size:0.75rem; color:#64748b;">{{ t("Backend") }}</div>
                     </div>
                 </div>
 
                 <ul class="admin-nav-list">
-                    <li><div id="nav-drivers" class="admin-nav-item active" onclick="switchTab('drivers')"><span>👨‍✈️</span> Drivers</div></li>
-                    <li><div id="nav-routes" class="admin-nav-item" onclick="switchTab('routes')"><span>🛣️</span> Routes</div></li>
-                    <li><div id="nav-buses" class="admin-nav-item" onclick="switchTab('buses')"><span>🚌</span> Buses</div></li>
-                    <li><div id="nav-schedules" class="admin-nav-item" onclick="switchTab('schedules')"><span>🕒</span> Schedules</div></li>
-                    <li><div id="nav-users" class="admin-nav-item" onclick="switchTab('users')"><span>🎓</span> Users</div></li>
+                    <li><div id="nav-drivers" class="admin-nav-item active" onclick="switchTab('drivers')"><span>👨‍✈️</span> {{ t("Drivers") }}</div></li>
+                    <li><div id="nav-routes" class="admin-nav-item" onclick="switchTab('routes')"><span>🛣️</span> {{ t("Routes") }}</div></li>
+                    <li><div id="nav-buses" class="admin-nav-item" onclick="switchTab('buses')"><span>🚌</span> {{ t("Buses") }}</div></li>
+                    <li><div id="nav-schedules" class="admin-nav-item" onclick="switchTab('schedules')"><span>🕒</span> {{ t("Schedules") }}</div></li>
+                    <li><div id="nav-users" class="admin-nav-item" onclick="switchTab('users')"><span>🎓</span> {{ t("Users") }}</div></li>
                 </ul>
             </div>
 
             <div class="sidebar-foot">
-                <div class="signed-in-as">Signed in as <b>{{ admin_username }}</b></div>
-                <a href="{{ url_for('views.landing') }}" class="admin-nav-item" style="color:#64748b;"><span>📱</span> Open {{ site.APP_NAME }} app</a>
-                <a href="{{ url_for('auth.admin_logout') }}" class="admin-nav-item" style="color:#dc2626;"><span>⎋</span> Sign out</a>
+                <div class="signed-in-as">{{ t("Signed in as") }} <b>{{ admin_username }}</b></div>
+                <a href="{{ url_for('views.landing') }}" class="admin-nav-item" style="color:#64748b;"><span>📱</span> {{ t("Open the {app} app", app=brand.APP_NAME) }}</a>
+                <a href="{{ url_for('auth.admin_logout') }}" class="admin-nav-item" style="color:#dc2626;"><span>⎋</span> {{ t("Sign out") }}</a>
             </div>
         </aside>
 
@@ -53,19 +52,19 @@
             <section id="tab-drivers" class="tab-section active">
                 <div class="admin-header-row">
                     <div class="admin-title">
-                        <h2>Drivers</h2>
-                        <p>Drivers sign in on the {{ site.APP_NAME }} app (not here) with the name and PIN you set.</p>
+                        <h2>{{ t("Drivers") }}</h2>
+                        <p>{{ t("Drivers sign in on the {app} app (not here) with the name and PIN you set.", app=brand.APP_NAME) }}</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openDriverModal()"><span>+</span> Add Driver</button>
+                    <button class="btn btn-primary" onclick="openDriverModal()"><span>+</span> {{ t("Add driver") }}</button>
                 </div>
 
                 <div class="admin-stats-grid">
                     <div class="stat-card">
-                        <div class="stat-label">Drivers</div>
+                        <div class="stat-label">{{ t("Drivers") }}</div>
                         <div class="stat-value">{{ drivers|length }}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">Signed in now</div>
+                        <div class="stat-label">{{ t("Signed in now") }}</div>
                         <div class="stat-value" style="color:#15803d;">{{ drivers | selectattr('is_logged_in') | list | length }}</div>
                     </div>
                 </div>
@@ -74,12 +73,12 @@
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>Driver</th>
-                                <th>Phone</th>
-                                <th>Bus today</th>
-                                <th>Route today</th>
-                                <th>Status</th>
-                                <th style="text-align:right;">Actions</th>
+                                <th>{{ t("Driver") }}</th>
+                                <th>{{ t("Phone") }}</th>
+                                <th>{{ t("Bus today") }}</th>
+                                <th>{{ t("Route today") }}</th>
+                                <th>{{ t("Status") }}</th>
+                                <th style="text-align:right;">{{ t("Actions") }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -98,7 +97,7 @@
                                         <span class="bus-color-dot" style="--bus-color: {{ dbus.color_hex }}; width:24px; height:24px; font-size:0;"></span>
                                         <span style="font-weight:700; white-space:nowrap;">{{ dbus.bus_number }}</span>
                                     </div>
-                                    {% else %}<span class="muted">No bus</span>{% endif %}
+                                    {% else %}<span class="muted">{{ t("No bus") }}</span>{% endif %}
                                 </td>
                                 <td>
                                     {% if droute %}
@@ -106,16 +105,16 @@
                                     {% else %}<span class="muted">—</span>{% endif %}
                                 </td>
                                 <td>
-                                    {% if driver.is_logged_in %}<span class="session-badge-active">● Signed in</span>
-                                    {% else %}<span class="session-badge-idle">Available</span>{% endif %}
+                                    {% if driver.is_logged_in %}<span class="session-badge-active">● {{ t("Signed in") }}</span>
+                                    {% else %}<span class="session-badge-idle">{{ t("Available") }}</span>{% endif %}
                                 </td>
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex; gap:0.4rem;">
-                                        <button class="btn btn-secondary btn-sm" onclick='openDriverModal({{ driver | tojson }})'>Edit</button>
+                                        <button class="btn btn-secondary btn-sm" onclick='openDriverModal({{ driver | tojson }})'>{{ t("Edit") }}</button>
                                         {% if driver.is_logged_in %}
-                                        <button class="btn btn-amber btn-sm" onclick='unlockDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>Unlock</button>
+                                        <button class="btn btn-amber btn-sm" onclick='unlockDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>{{ t("Unlock") }}</button>
                                         {% endif %}
-                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>Delete</button>
+                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>{{ t("Delete") }}</button>
                                     </div>
                                 </td>
                             </tr>
@@ -129,21 +128,21 @@
             <section id="tab-routes" class="tab-section">
                 <div class="admin-header-row">
                     <div class="admin-title">
-                        <h2>Routes</h2>
-                        <p>Add or remove routes. Every route ends at {{ final_destination.stop_name }}.</p>
+                        <h2>{{ t("Routes") }}</h2>
+                        <p>{{ t("Add or remove routes. Every route ends at {stop}.", stop=final_destination.stop_name) }}</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openRouteModal()"><span>+</span> Add Route</button>
+                    <button class="btn btn-primary" onclick="openRouteModal()"><span>+</span> {{ t("Add route") }}</button>
                 </div>
 
                 <div class="table-card">
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>Route</th>
-                                <th>Length</th>
-                                <th>Ends at</th>
-                                <th>Buses today</th>
-                                <th style="text-align:right;">Actions</th>
+                                <th>{{ t("Route") }}</th>
+                                <th>{{ t("Length") }}</th>
+                                <th>{{ t("Ends at") }}</th>
+                                <th>{{ t("Buses today") }}</th>
+                                <th style="text-align:right;">{{ t("Actions") }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -154,17 +153,17 @@
                                     <span class="route-pill"><span class="route-swatch" style="--route-color: {{ route.color_hex }};"></span>{{ route.route_name }}</span>
                                     <div style="font-size:0.75rem; color:#64748b; margin-left:14px;">{{ route.route_code }} · {{ route.route_id }}</div>
                                 </td>
-                                <td>{{ '%.1f' | format(route.length_km) }} km</td>
+                                <td>{{ t("{km} km", km='%.1f' | format(route.length_km)) }}</td>
                                 <td>🏁 {{ final_destination.stop_name }}</td>
                                 <td>
                                     {% for b in rbuses %}
                                     <span title="{{ b.bus_number }}" class="bus-color-dot" style="--bus-color: {{ b.color_hex }}; width:22px; height:22px; font-size:0; margin-right:2px;"></span>
-                                    {% else %}<span class="muted">None</span>{% endfor %}
+                                    {% else %}<span class="muted">{{ t("None") }}</span>{% endfor %}
                                 </td>
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex; gap:0.4rem;">
-                                        <button class="btn btn-secondary btn-sm" onclick='openRouteModal({{ route.route_id | tojson }})'>Edit</button>
-                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteRoute({{ route.route_id | tojson }}, {{ route.route_name | tojson }})'>Delete</button>
+                                        <button class="btn btn-secondary btn-sm" onclick='openRouteModal({{ route.route_id | tojson }})'>{{ t("Edit") }}</button>
+                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteRoute({{ route.route_id | tojson }}, {{ route.route_name | tojson }})'>{{ t("Delete") }}</button>
                                     </div>
                                 </td>
                             </tr>
@@ -178,15 +177,15 @@
             <section id="tab-buses" class="tab-section">
                 <div class="admin-header-row">
                     <div class="admin-title">
-                        <h2>Buses</h2>
-                        <p>Choose each bus's route for today. Its driver sees the change on the app.</p>
+                        <h2>{{ t("Buses") }}</h2>
+                        <p>{{ t("Choose each bus's route for today. Its driver sees the change on the app.") }}</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openBusModal()"><span>+</span> Add Bus</button>
+                    <button class="btn btn-primary" onclick="openBusModal()"><span>+</span> {{ t("Add bus") }}</button>
                 </div>
 
                 <div class="admin-stats-grid">
                     <div class="stat-card">
-                        <div class="stat-label">Buses</div>
+                        <div class="stat-label">{{ t("Buses") }}</div>
                         <div class="stat-value">{{ buses|length }}</div>
                     </div>
                     <div class="stat-card">
@@ -194,11 +193,11 @@
                         <div class="stat-value">{% for key in rider_types %}{{ buses | selectattr('audience', 'equalto', key) | list | length }}{{ " / " if not loop.last }}{% endfor %}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">Live now</div>
+                        <div class="stat-label">{{ t("Live now") }}</div>
                         <div class="stat-value" style="color:#15803d;">{{ buses | selectattr('is_active') | list | length }}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">Final destination</div>
+                        <div class="stat-label">{{ t("Final destination") }}</div>
                         <div class="stat-value" style="font-size:1.25rem;">🏁 {{ final_destination.stop_name }}</div>
                     </div>
                 </div>
@@ -207,12 +206,12 @@
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>Bus</th>
-                                <th>For</th>
-                                <th>Route today</th>
-                                <th>Driver</th>
-                                <th>Status</th>
-                                <th style="text-align:right;">Actions</th>
+                                <th>{{ t("Bus") }}</th>
+                                <th>{{ t("For") }}</th>
+                                <th>{{ t("Route today") }}</th>
+                                <th>{{ t("Driver") }}</th>
+                                <th>{{ t("Status") }}</th>
+                                <th style="text-align:right;">{{ t("Actions") }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -224,25 +223,25 @@
                                         <div>
                                             <div style="font-weight:700; color:#0f172a; white-space:nowrap;">{{ bus.bus_number }}</div>
                                             <div style="font-size:0.75rem; color:#64748b;">{{ bus.bus_name }}</div>
-                                            <div style="font-size:0.72rem; color:#94a3b8;">{{ bus.license_plate or bus.bus_id }} · {{ bus.capacity }} seats</div>
+                                            <div style="font-size:0.72rem; color:#94a3b8;">{{ bus.license_plate or bus.bus_id }} · {{ t("{count} seats", count=bus.capacity) }}</div>
                                         </div>
                                     </div>
                                 </td>
                                 <td>
                                     {% set aud = rider_types.get(bus.audience) %}
-                                    <select class="inline-audience-select" aria-label="Who {{ bus.bus_number }} is for"
+                                    <select class="inline-audience-select" aria-label="{{ t("Who {bus} is for", bus=bus.bus_number) }}"
                                             style="--aud-color: {{ aud.color if aud else '#64748b' }}"
                                             data-bus-id="{{ bus.bus_id }}" data-current="{{ bus.audience }}" onchange="changeBusAudience(this)">
-                                        {% if not aud %}<option value="" selected disabled>Choose…</option>{% endif %}
+                                        {% if not aud %}<option value="" selected disabled>{{ t("Choose…") }}</option>{% endif %}
                                         {% for key, rider in rider_types.items() %}
-                                        <option value="{{ key }}" {% if bus.audience == key %}selected{% endif %}>{{ rider.icon }} {{ rider.plural }}</option>
+                                        <option value="{{ key }}" {% if bus.audience == key %}selected{% endif %}>{{ rider.plural }}</option>
                                         {% endfor %}
                                     </select>
                                 </td>
                                 <td>
-                                    <select class="inline-route-select" aria-label="Route today for {{ bus.bus_number }}"
+                                    <select class="inline-route-select" aria-label="{{ t("Route today for {bus}", bus=bus.bus_number) }}"
                                             data-bus-id="{{ bus.bus_id }}" data-current="{{ bus.assigned_route_id }}"
-                                            onchange="changeBusRoute(this)" {% if bus.is_active %}disabled title="Stop the trip to change the route"{% endif %}>
+                                            onchange="changeBusRoute(this)" {% if bus.is_active %}disabled title="{{ t("Stop the trip to change the route") }}"{% endif %}>
                                         {% for r in routes %}
                                         <option value="{{ r.route_id }}" {% if r.route_id == bus.assigned_route_id %}selected{% endif %}>{{ r.route_name }}</option>
                                         {% endfor %}
@@ -250,16 +249,16 @@
                                 </td>
                                 <td>{{ bus.driver_name or '—' }}</td>
                                 <td>
-                                    {% if bus.is_active %}<span class="session-badge-active">● Live</span>
-                                    {% else %}<span class="session-badge-idle">Offline</span>{% endif %}
+                                    {% if bus.is_active %}<span class="session-badge-active">● {{ t("Live") }}</span>
+                                    {% else %}<span class="session-badge-idle">{{ t("Offline") }}</span>{% endif %}
                                 </td>
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex; gap:0.4rem;">
-                                        <button class="btn btn-secondary btn-sm" onclick='simulateBus({{ bus.bus_id | tojson }}, {{ bus.is_active | tojson }})' title="Drive this bus along its route (for testing)">
-                                            {% if bus.is_active %}Stop{% else %}Test drive{% endif %}
+                                        <button class="btn btn-secondary btn-sm" onclick='simulateBus({{ bus.bus_id | tojson }}, {{ bus.is_active | tojson }})' title="{{ t("Drive this bus along its route (for testing)") }}">
+                                            {% if bus.is_active %}{{ t("Stop") }}{% else %}{{ t("Test drive") }}{% endif %}
                                         </button>
-                                        <button class="btn btn-secondary btn-sm" onclick='openBusModal({{ bus | tojson }})'>Edit</button>
-                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteBus({{ bus.bus_id | tojson }}, {{ bus.bus_number | tojson }})'>Delete</button>
+                                        <button class="btn btn-secondary btn-sm" onclick='openBusModal({{ bus | tojson }})'>{{ t("Edit") }}</button>
+                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteBus({{ bus.bus_id | tojson }}, {{ bus.bus_number | tojson }})'>{{ t("Delete") }}</button>
                                     </div>
                                 </td>
                             </tr>
@@ -269,22 +268,21 @@
                 </div>
             </section>
 
-            <!-- ================= USERS (every rider type) ================= -->
             <!-- ================= SCHEDULES (one weekly timetable per route) ================= -->
             <section id="tab-schedules" class="tab-section">
                 <div class="admin-header-row">
                     <div class="admin-title">
-                        <h2>Bus schedules</h2>
-                        <p>Set each route's buses for every day. Riders see today's schedule.</p>
+                        <h2>{{ t("Bus schedules") }}</h2>
+                        <p>{{ t("Set each route's buses for every day. Riders see today's schedule.") }}</p>
                     </div>
                 </div>
                 <div class="table-card">
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>Route</th>
+                                <th>{{ t("Route") }}</th>
                                 {% for key, name in day_names.items() %}<th class="week-col">{{ name[:3] }}</th>{% endfor %}
-                                <th style="text-align:right;">Actions</th>
+                                <th style="text-align:right;">{{ t("Actions") }}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -295,33 +293,35 @@
                                 {% set d = s.days[key] %}
                                 <td class="week-col">
                                     {% if d.morning or d.afternoon %}
-                                    <span class="week-pill" title="Morning {{ d.morning|length }} · Afternoon {{ d.afternoon|length }}">{{ d.morning|length }}<i>·</i>{{ d.afternoon|length }}</span>
+                                    <span class="week-pill" title="{{ t("Morning {morning} · Afternoon {afternoon}", morning=d.morning|length, afternoon=d.afternoon|length) }}">{{ d.morning|length }}<i>·</i>{{ d.afternoon|length }}</span>
                                     {% else %}<span class="week-off">—</span>{% endif %}
                                 </td>
                                 {% endfor %}
                                 <td style="text-align:right;">
-                                    <button class="btn btn-secondary btn-sm" onclick='openScheduleModal({{ s.route_id | tojson }})'>Edit</button>
+                                    <button class="btn btn-secondary btn-sm" onclick='openScheduleModal({{ s.route_id | tojson }})'>{{ t("Edit") }}</button>
                                 </td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="9" class="empty-row">Add a route first.</td></tr>
+                            <tr><td colspan="9" class="empty-row">{{ t("Add a route first.") }}</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </section>
 
+            <!-- ================= USERS (every rider type) ================= -->
             <section id="tab-users" class="tab-section">
                 <div class="admin-header-row">
                     <div class="admin-title">
-                        <h2>Users</h2>
-                        <p>{% for key, r in rider_types.items() %}{{ r.plural }}{{ ', ' if not loop.last }}{% endfor %} who have opened the live map.</p>
+                        <h2>{{ t("Users") }}</h2>
+                        {% set groups = [] %}{% for key, r in rider_types.items() %}{% set _ = groups.append(r.plural) %}{% endfor %}
+                        <p>{{ t("{groups} who have opened the live map.", groups=groups | join(", ")) }}</p>
                     </div>
                 </div>
                 <div class="table-card">
                     <table class="admin-table">
                         <thead>
-                            <tr><th>ID</th><th>Name</th><th>Type</th><th>Last seen</th></tr>
+                            <tr><th>{{ t("ID") }}</th><th>{{ t("Name") }}</th><th>{{ t("Type") }}</th><th>{{ t("Last seen") }}</th></tr>
                         </thead>
                         <tbody>
                             {% for rider in riders %}
@@ -329,11 +329,11 @@
                                 <td><b>{{ rider.rider_id }}</b></td>
                                 <td>{{ rider.full_name }}</td>
                                 {% set rtype = rider_types.get(rider.role) %}
-                                <td>{{ rtype.icon ~ " " ~ rtype.label if rtype else rider.role }}</td>
+                                <td>{{ rtype.label if rtype else rider.role }}</td>
                                 <td><time class="local-time" datetime="{{ rider.last_seen_at }}">{{ rider.last_seen_at[:16].replace("T", " ") }} UTC</time></td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="4" class="empty-row">Nobody has signed in yet.</td></tr>
+                            <tr><td colspan="4" class="empty-row">{{ t("Nobody has signed in yet.") }}</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -346,8 +346,8 @@
     <div id="modal-schedule" class="modal-overlay">
         <div class="modal-card wide">
             <div class="modal-head">
-                <h3 id="schedule-modal-title">Bus schedule</h3>
-                <button class="modal-close" onclick="closeModal('modal-schedule')" aria-label="Close">✕</button>
+                <h3 id="schedule-modal-title">{{ t("Bus schedule") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-schedule')" aria-label="{{ t("Close") }}">✕</button>
             </div>
             <form id="form-schedule" novalidate>
                 <div id="schedule-form-error" class="form-error"></div>
@@ -358,21 +358,21 @@
                 </div>
                 <div class="sched-edit-grid">
                     <div class="sched-edit-col">
-                        <div class="sched-edit-head"><span>Morning</span><small>Reaches campus</small></div>
+                        <div class="sched-edit-head"><span>{{ t("Morning") }}</span><small>{{ t("Reaches campus") }}</small></div>
                         <div class="trip-list" id="trips-morning"></div>
-                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="morning">+ Add bus</button>
+                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="morning">+ {{ t("Add bus") }}</button>
                     </div>
                     <div class="sched-edit-col">
-                        <div class="sched-edit-head"><span>Afternoon</span><small>Leaves campus</small></div>
+                        <div class="sched-edit-head"><span>{{ t("Afternoon") }}</span><small>{{ t("Leaves campus") }}</small></div>
                         <div class="trip-list" id="trips-afternoon"></div>
-                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="afternoon">+ Add bus</button>
+                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="afternoon">+ {{ t("Add bus") }}</button>
                     </div>
                 </div>
                 <div class="modal-actions sched-edit-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" id="schedule-copy-all">Copy this day to all days</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="schedule-copy-all">{{ t("Copy this day to all days") }}</button>
                     <span class="spacer"></span>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-schedule')">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-schedule')">{{ t("Cancel") }}</button>
+                    <button type="submit" class="btn btn-primary btn-sm">{{ t("Save") }}</button>
                 </div>
             </form>
         </div>
@@ -382,29 +382,29 @@
     <div id="modal-driver" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-head">
-                <h3 id="driver-modal-title">Add Driver</h3>
-                <button class="modal-close" onclick="closeModal('modal-driver')" aria-label="Close">✕</button>
+                <h3 id="driver-modal-title">{{ t("Add driver") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-driver')" aria-label="{{ t("Close") }}">✕</button>
             </div>
             <form id="form-driver" novalidate>
                 <input type="hidden" id="driver-id">
                 <div id="driver-form-error" class="form-error"></div>
                 <div class="field">
-                    <label class="field-label" for="driver-name">Driver name</label>
-                    <input type="text" id="driver-name" class="custom-input" maxlength="60" placeholder="e.g. Md. Tariqul Islam" required>
+                    <label class="field-label" for="driver-name">{{ t("Driver name") }}</label>
+                    <input type="text" id="driver-name" class="custom-input" maxlength="60" placeholder="{{ t("e.g. Md. Tariqul Islam") }}" required>
                 </div>
                 <div class="field-row">
                     <div class="field">
-                        <label class="field-label" for="driver-phone">Phone</label>
-                        <input type="tel" id="driver-phone" class="custom-input" maxlength="30" placeholder="+880 17xx-xxxxxx">
+                        <label class="field-label" for="driver-phone">{{ t("Phone") }}</label>
+                        <input type="tel" id="driver-phone" class="custom-input" maxlength="30" placeholder="{{ t("+880 17xx-xxxxxx") }}">
                     </div>
                     <div class="field">
-                        <label class="field-label" for="driver-pin">Login PIN</label>
-                        <input type="password" id="driver-pin" data-placeholder="{{ pin_rules.min }}–{{ pin_rules.max }} digits" class="custom-input" inputmode="numeric" pattern="\d{ {{- pin_rules.min }},{{ pin_rules.max -}} }" maxlength="{{ pin_rules.max }}" placeholder="{{ pin_rules.min }}–{{ pin_rules.max }} digits" autocomplete="new-password">
+                        <label class="field-label" for="driver-pin">{{ t("Login PIN") }}</label>
+                        <input type="password" id="driver-pin" data-placeholder="{{ t("{min}–{max} digits", min=pin_rules.min, max=pin_rules.max) }}" class="custom-input" inputmode="numeric" pattern="\d{ {{- pin_rules.min }},{{ pin_rules.max -}} }" maxlength="{{ pin_rules.max }}" placeholder="{{ t("{min}–{max} digits", min=pin_rules.min, max=pin_rules.max) }}" autocomplete="new-password">
                         <div class="field-note" id="driver-pin-note"></div>
                     </div>
                 </div>
                 <div class="field">
-                    <label class="field-label" for="driver-bus">Bus</label>
+                    <label class="field-label" for="driver-bus">{{ t("Bus") }}</label>
                     <select id="driver-bus" class="custom-select" required>
                         {% for b in buses %}
                         <option value="{{ b.bus_id }}" data-route-id="{{ b.assigned_route_id }}">{{ b.bus_number }} · {{ b.bus_name }}</option>
@@ -413,8 +413,8 @@
                     <div class="field-note" id="driver-route-note"></div>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-driver')">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm" id="driver-submit-btn">Add Driver</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-driver')">{{ t("Cancel") }}</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="driver-submit-btn">{{ t("Add driver") }}</button>
                 </div>
             </form>
         </div>
@@ -424,40 +424,40 @@
     <div id="modal-route" class="modal-overlay">
         <div class="modal-card wide">
             <div class="modal-head">
-                <h3 id="route-modal-title">Add Route</h3>
-                <button class="modal-close" onclick="closeModal('modal-route')" aria-label="Close">✕</button>
+                <h3 id="route-modal-title">{{ t("Add route") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-route')" aria-label="{{ t("Close") }}">✕</button>
             </div>
             <form id="form-route" novalidate>
                 <input type="hidden" id="route-id">
                 <div id="route-form-error" class="form-error"></div>
                 <div class="field-row" style="grid-template-columns: 1fr auto;">
                     <div class="field">
-                        <label class="field-label" for="route-name">Route name</label>
-                        <input type="text" id="route-name" class="custom-input" maxlength="80" placeholder="e.g. Rupsha - Hadi Chattar" autocomplete="off" required>
-                        <div class="field-note">Students, drivers and the admin all see this name.</div>
+                        <label class="field-label" for="route-name">{{ t("Route name") }}</label>
+                        <input type="text" id="route-name" class="custom-input" maxlength="80" placeholder="{{ t("e.g. Rupsha - {stop}", stop=final_destination.stop_name) }}" autocomplete="off" required>
+                        <div class="field-note">{{ t("Riders, drivers and the admin all see this name.") }}</div>
                     </div>
                     <div class="field">
-                        <label class="field-label" for="route-color">Colour</label>
+                        <label class="field-label" for="route-color">{{ t("Colour") }}</label>
                         <input type="color" id="route-color" value="#2563eb" style="width:52px; height:42px; border:1.5px solid #cbd5e1; border-radius:10px; padding:3px; background:#fff;">
                     </div>
                 </div>
 
                 <div class="field">
-                    <span class="field-label">Route</span>
+                    <span class="field-label">{{ t("Route") }}</span>
                     <div id="route-map"></div>
                     <div class="route-toolbar">
-                        <span class="route-info" id="route-info">Click the map where the route starts.</span>
+                        <span class="route-info" id="route-info">{{ t("Click the map where the route starts.") }}</span>
                         <span class="route-tools">
-                            <button type="button" class="btn btn-secondary btn-sm" id="route-undo">Undo last point</button>
-                            <button type="button" class="btn btn-secondary btn-sm" id="route-clear">Clear</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="route-undo">{{ t("Undo last point") }}</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="route-clear">{{ t("Clear") }}</button>
                         </span>
                     </div>
-                    <div class="map-hint">Click along the roads the bus takes, starting where the route begins. The line follows the roads to {{ final_destination.stop_name }}. Drag a point to move it, double-click it to remove it.</div>
+                    <div class="map-hint">{{ t("Click along the roads the bus takes, starting where the route begins. The line follows the roads to {stop}. Drag a point to move it, double-click it to remove it.", stop=final_destination.stop_name) }}</div>
                 </div>
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-route')">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm" id="route-submit-btn">Add Route</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-route')">{{ t("Cancel") }}</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="route-submit-btn">{{ t("Add route") }}</button>
                 </div>
             </form>
         </div>
@@ -467,43 +467,43 @@
     <div id="modal-bus" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-head">
-                <h3 id="bus-modal-title">Add Bus</h3>
-                <button class="modal-close" onclick="closeModal('modal-bus')" aria-label="Close">✕</button>
+                <h3 id="bus-modal-title">{{ t("Add bus") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-bus')" aria-label="{{ t("Close") }}">✕</button>
             </div>
             <form id="form-bus" novalidate>
                 <input type="hidden" id="bus-id">
                 <div id="bus-form-error" class="form-error"></div>
                 <div class="field-row">
                     <div class="field">
-                        <label class="field-label" for="bus-number">Bus number</label>
-                        <input type="text" id="bus-number" class="custom-input" placeholder="KU Bus #05" maxlength="40" required>
+                        <label class="field-label" for="bus-number">{{ t("Bus number") }}</label>
+                        <input type="text" id="bus-number" class="custom-input" placeholder="{{ t("KU Bus #05") }}" maxlength="40" required>
                     </div>
                     <div class="field">
-                        <label class="field-label" for="bus-name">Bus name</label>
-                        <input type="text" id="bus-name" class="custom-input" placeholder="Rupsha Express" maxlength="60">
+                        <label class="field-label" for="bus-name">{{ t("Bus name") }}</label>
+                        <input type="text" id="bus-name" class="custom-input" placeholder="{{ t("Rupsha Express") }}" maxlength="60">
                     </div>
                 </div>
                 <div class="field-row">
                     <div class="field">
-                        <label class="field-label" for="bus-plate">License plate</label>
-                        <input type="text" id="bus-plate" class="custom-input" placeholder="Khulna-Cha 11-6001" maxlength="40">
+                        <label class="field-label" for="bus-plate">{{ t("License plate") }}</label>
+                        <input type="text" id="bus-plate" class="custom-input" placeholder="{{ t("Khulna-Cha 11-6001") }}" maxlength="40">
                     </div>
                     <div class="field">
-                        <label class="field-label" for="bus-capacity">Seats</label>
+                        <label class="field-label" for="bus-capacity">{{ t("Seats") }}</label>
                         <input type="number" id="bus-capacity" class="custom-input" min="1" max="{{ max_bus_seats }}" value="{{ default_bus_seats }}" required>
                     </div>
                 </div>
                 <div class="field">
-                    <span class="field-label">Bus for</span>
-                    <div class="audience-choice" role="radiogroup" aria-label="Bus for">
+                    <span class="field-label">{{ t("Bus for") }}</span>
+                    <div class="audience-choice" role="radiogroup" aria-label="{{ t("Bus for") }}">
                         {% for key, rider in rider_types.items() %}
-                        <label><input type="radio" name="bus-audience" value="{{ key }}" {% if loop.first %}checked{% endif %}> {{ rider.icon }} {{ rider.plural }}</label>
+                        <label><input type="radio" name="bus-audience" value="{{ key }}" {% if loop.first %}checked{% endif %}> {{ rider.plural }}</label>
                         {% endfor %}
                     </div>
-                    <div class="field-note">Each group only sees the buses meant for it.</div>
+                    <div class="field-note">{{ t("Each group only sees the buses meant for it.") }}</div>
                 </div>
                 <div class="field">
-                    <label class="field-label" for="bus-route-id">Route today</label>
+                    <label class="field-label" for="bus-route-id">{{ t("Route today") }}</label>
                     <select id="bus-route-id" class="custom-select" required>
                         {% for r in routes %}
                         <option value="{{ r.route_id }}">{{ r.route_name }}</option>
@@ -511,17 +511,17 @@
                     </select>
                 </div>
                 <div class="field">
-                    <span class="field-label">Colour on the map</span>
+                    <span class="field-label">{{ t("Colour on the map") }}</span>
                     <div class="color-swatch-row" id="bus-color-swatches">
                         {% for c in bus_color_palette %}
-                        <button type="button" class="color-swatch-btn" style="background:{{ c }};" data-color="{{ c }}" title="{{ c }}" aria-label="Colour {{ c }}"></button>
+                        <button type="button" class="color-swatch-btn" style="background:{{ c }};" data-color="{{ c }}" title="{{ c }}" aria-label="{{ t("Colour {color}", color=c) }}"></button>
                         {% endfor %}
-                        <input type="color" id="bus-color" value="#E11D48" title="Pick any colour">
+                        <input type="color" id="bus-color" value="#E11D48" title="{{ t("Pick any colour") }}">
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-bus')">Cancel</button>
-                    <button type="submit" id="bus-submit-btn" class="btn btn-primary btn-sm">Add Bus</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-bus')">{{ t("Cancel") }}</button>
+                    <button type="submit" id="bus-submit-btn" class="btn btn-primary btn-sm">{{ t("Add bus") }}</button>
                 </div>
             </form>
         </div>
@@ -530,6 +530,7 @@
     <div id="admin-toast" role="status" aria-live="polite"></div>
 
     <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_bus_seats": default_bus_seats, "schedules": schedules, "day_names": day_names, "today": today} | tojson }}</script>
+    <script>window.WORDS = Object.assign(window.WORDS || {}, {{ page_words("backend") | tojson }});</script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>
 </html>

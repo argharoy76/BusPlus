@@ -8,7 +8,11 @@
  *
  * Needs google_maps_helper.js (window.googleMapsHelper and escapeHtml) loaded first.
  * Settings are kept in this browser's localStorage.
+ * Words: content/words/rider_map.py (the RT look-up below).
  */
+
+/** Words of this page from content/words/rider_map.py. */
+const RT = words("rider_map");
 
 /** Bus icon used in the list (front view of a bus, drawn with the current text colour). */
 const BUS_ICON_SVG = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><circle cx="8.5" cy="14" r="1" class="ico-fill"/><circle cx="15.5" cy="14" r="1" class="ico-fill"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>';
@@ -118,6 +122,7 @@ class BottomSheet {
         this.setVisible(this.snaps[this.snap], true);
     }
 
+    /** Moves the sheet to a resting height: "peek", "half" or "full". */
     snapTo(name) {
         this.measure();
         this.snap = name;
@@ -137,11 +142,13 @@ class BottomSheet {
         this.snapTo(best);
     }
 
+    /** A drag on the sheet began. */
     startDrag(y) {
         this.measure();
         this.drag = { startY: y, startVisible: this.visiblePx, lastY: y, lastT: performance.now(), v: 0, moved: false };
     }
 
+    /** The sheet follows the finger / mouse. */
     moveDrag(y) {
         const d = this.drag;
         if (!d) return;
@@ -156,6 +163,7 @@ class BottomSheet {
         this.setVisible(d.startVisible + dy, false);
     }
 
+    /** Drag ended: settle at the nearest resting height. */
     endDrag() {
         const d = this.drag;
         this.drag = null;
@@ -264,10 +272,11 @@ class StudentTracker {
         this.allRoutes = data.routes || [];
         this.latestBuses = data.buses || [];
 
-        // Home stop (default Malabotha More) and an optional typed address shown as its name
-        this.homePosition = settings.get("busplus_home_stop") || "Malabotha More";
-        this.homeLat = parseFloat(settings.get("busplus_home_lat")) || 22.7725;
-        this.homeLng = parseFloat(settings.get("busplus_home_lng")) || 89.5855;
+        // Home stop (default: DEFAULT_HOME in content/map_settings.py) and an optional typed address shown as its name
+        const home = window.APP_CONFIG?.defaultHome || {};
+        this.homePosition = settings.get("busplus_home_stop") || home.stop_name || "";
+        this.homeLat = parseFloat(settings.get("busplus_home_lat")) || home.latitude;
+        this.homeLng = parseFloat(settings.get("busplus_home_lng")) || home.longitude;
         this.homeAddress = settings.get("busplus_home_address") || "";
 
         // Arrival alert: how many minutes before, and how many times to repeat
@@ -324,6 +333,7 @@ class StudentTracker {
         this.btnLocateLabel = this.btnLocateMe?.querySelector("span");
     }
 
+    /** Starts the page: map, routes, live feed, menu, Home and alerts. */
     async init() {
         const helper = window.googleMapsHelper;
         helper.initMap("student-map");
@@ -379,10 +389,10 @@ class StudentTracker {
             this.sideHomeLabel.textContent = this.getHomeDisplayName();
         }
         if (this.sideNotifLabel) {
-            const repeat = this.alertFrequency === "continuous"
-                ? "continuous"
-                : `${this.alertFrequency} time${this.alertFrequency === "1" ? "" : "s"}`;
-            this.sideNotifLabel.textContent = `${this.alertThresholdMinutes} min before · ${repeat}`;
+            const repeat = this.alertFrequency === "continuous" ? RT("Until the bus arrives")
+                : this.alertFrequency === "1" ? RT("Once")
+                : RT("{count} times", { count: this.alertFrequency });
+            this.sideNotifLabel.textContent = RT("{minutes} min before · {repeat}", { minutes: this.alertThresholdMinutes, repeat });
         }
     }
 
@@ -472,6 +482,7 @@ class StudentTracker {
         });
     }
 
+    /** Shows matching stops under the Home address box. */
     renderHomeSuggestions(query) {
         const box = this.homeSuggestionsBox;
         if (!box) return;
@@ -530,12 +541,14 @@ class StudentTracker {
         el.append(text.slice(0, i), mark, text.slice(i + query.length));
     }
 
+    /** Highlights a Home suggestion (arrow keys). */
     setActiveSuggestion(idx) {
         this.activeSuggestionIdx = idx;
         Array.from(this.homeSuggestionsBox?.children || []).forEach((row, i) => row.classList.toggle("active", i === idx));
         this.homeAddressInput?.setAttribute("aria-activedescendant", idx >= 0 ? `side-home-suggestion-${idx}` : "");
     }
 
+    /** Puts the chosen stop into the Home address box. */
     pickHomeSuggestion(place) {
         if (!place || !this.homeAddressInput) return;
         this.homeAddressInput.value = place.name;
@@ -544,6 +557,7 @@ class StudentTracker {
         this.homeAddressInput.focus();
     }
 
+    /** Hides the Home suggestions. */
     hideHomeSuggestions() {
         this.homeSuggestions = [];
         this.activeSuggestionIdx = -1;
@@ -566,7 +580,7 @@ class StudentTracker {
             const raw = input.value.trim();
             if (!/^\d+$/.test(raw)) return null;
             const val = parseInt(raw, 10);
-            return val >= 1 && val <= 120 ? val : null;
+            return val >= 1 && val <= this.maxAlertMinutes() ? val : null;
         };
 
         const apply = () => {
@@ -598,20 +612,27 @@ class StudentTracker {
         });
     }
 
+    /** Largest "notify me" minutes allowed (MAX_ALERT_MINUTES in content/rules.py). */
+    maxAlertMinutes() {
+        return window.APP_CONFIG?.alertMinutesMax || 120;
+    }
+
     /** Shows, in plain words, what the typed minutes mean (or why the value isn't valid). */
     updateMinutesHint(minutes, isEmpty = false) {
         const hint = this.minutesHint;
         if (!hint) return;
         if (isEmpty) {
             hint.className = "side-minutes-hint";
-            hint.textContent = "Type how many minutes before arrival you want the alert.";
+            hint.textContent = RT("Type how many minutes before arrival you want the alert.");
         } else if (minutes === null || minutes === undefined) {
             hint.className = "side-minutes-hint is-error";
-            hint.textContent = "Enter a whole number from 1 to 120.";
+            hint.textContent = RT("Enter a whole number from 1 to {max}.", { max: this.maxAlertMinutes() });
         } else {
             hint.className = "side-minutes-hint is-ok";
-            const unit = minutes === 1 ? "minute" : "minutes";
-            hint.textContent = `You'll be notified ${minutes} ${unit} before the bus reaches ${this.getAlertStopName()}.`;
+            const stop = this.getAlertStopName();
+            hint.textContent = minutes === 1
+                ? RT("You'll be notified 1 minute before the bus reaches {stop}.", { stop })
+                : RT("You'll be notified {minutes} minutes before the bus reaches {stop}.", { minutes, stop });
         }
     }
 
@@ -649,7 +670,7 @@ class StudentTracker {
         this.alertTriggerCount = 0;
         this.fetchLiveTrackingData();
         window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng);
-        this.showToast("Home saved", "toast-success");
+        this.showToast(RT("Home saved"), "toast-success");
     }
 
     /** Saves how many minutes before arrival the alert should go off. */
@@ -673,30 +694,30 @@ class StudentTracker {
         settings.set("busplus_alert_frequency", freqVal);
         this.alertTriggerCount = 0;
         this.updateMenuSummaries();
-        this.showToast("Notification updated", "toast-info");
+        this.showToast(RT("Notification updated"), "toast-info");
     }
 
     /** "Locate Me": shows the rider's GPS position on the map. */
     locateStudentGps() {
         if (!navigator.geolocation) {
-            alert("Geolocation is not supported by your browser.");
+            this.showToast(RT("This browser can't share your location."), "toast-warning");
             return;
         }
         const setLabel = (text) => { if (this.btnLocateLabel) this.btnLocateLabel.textContent = text; };
-        const original = this.btnLocateLabel?.dataset.label || this.btnLocateLabel?.textContent || "Locate Me";
-        if (this.btnLocateLabel) this.btnLocateLabel.dataset.label = original;   // words from content/site_text.py
+        const original = this.btnLocateLabel?.dataset.label || this.btnLocateLabel?.textContent || RT("Locate me");
+        if (this.btnLocateLabel) this.btnLocateLabel.dataset.label = original;
 
-        setLabel("Locating...");
+        setLabel(RT("Locating…"));
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 window.googleMapsHelper.updateStudentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
-                setLabel("GPS Active");
+                setLabel(RT("Location on"));
                 this.btnLocateMe.classList.add("active");
-                this.showToast("Location found", "toast-success");
+                this.showToast(RT("Location found"), "toast-success");
             },
             () => {
                 setLabel(original);
-                this.showToast("Could not get your location. Please allow location access for this site.", "toast-warning");
+                this.showToast(RT("Could not get your location. Please allow location access for this site."), "toast-warning");
             },
             { enableHighAccuracy: true, timeout: 8000 }
         );
@@ -788,7 +809,7 @@ class StudentTracker {
 
     /** The stop alerts are about: the rider's Home stop. */
     getAlertStopName() {
-        return this.homePosition || "Malabotha More";
+        return this.homePosition || window.APP_CONFIG?.defaultHome?.stop_name || "";
     }
 
     /**
@@ -832,7 +853,8 @@ class StudentTracker {
 
         const eta = alertInfo.eta_minutes;
         this.homeStripText.textContent = target.stopName;
-        this.homeStripEta.textContent = alertInfo.urgency_level === "ARRIVED" ? "Here" : (eta < 1 ? "< 1 min" : `${Math.round(eta)} min`);
+        this.homeStripEta.textContent = alertInfo.urgency_level === "ARRIVED" ? RT("Here")
+            : eta < 1 ? RT("< 1 min") : RT("{minutes} min", { minutes: Math.round(eta) });
         if (alertInfo.is_alert_triggered && eta <= this.alertThresholdMinutes) {
             this.homeStrip.classList.add("is-alert");
         }
@@ -857,7 +879,7 @@ class StudentTracker {
         this.lastAlertTimestamp = now;
         this.playProximityAlertChime();
 
-        const title = alertInfo.alert_title + (this.alertTriggerCount > 1 ? ` (Alert #${this.alertTriggerCount})` : "");
+        const title = alertInfo.alert_title + (this.alertTriggerCount > 1 ? RT(" (alert {count})", { count: this.alertTriggerCount }) : "");
         this.showToast(title, "toast-warning");
         this.triggerBrowserNotification(title, alertInfo.alert_message);
     }
@@ -880,6 +902,7 @@ class StudentTracker {
         }
     }
 
+    /** Creates the bottom sheet and its click handlers. */
     setupBottomSheet() {
         if (!this.sheetEl) return;
         this.sheet = new BottomSheet({
@@ -972,6 +995,7 @@ class StudentTracker {
         });
     }
 
+    /** Shows the routes matching the typed text in the drop-down. */
     renderRouteOptions(query) {
         const box = this.routeSearchDropdown;
         if (!box) return;
@@ -980,7 +1004,7 @@ class StudentTracker {
         this.activeRouteOptionIdx = -1;
 
         if (!this.routeOptions.length) {
-            box.innerHTML = `<div class="route-option-empty">No route found</div>`;
+            box.innerHTML = `<div class="route-option-empty">${escapeHtml(RT("No route found"))}</div>`;
         } else {
             box.innerHTML = this.routeOptions.map(({ route }, idx) => `
                 <div class="route-option" role="option" id="route-option-${idx}" data-route-id="${escapeHtml(route.route_id)}">
@@ -1009,6 +1033,7 @@ class StudentTracker {
             escapeHtml(t.slice(i + query.length));
     }
 
+    /** Highlights a route in the drop-down (arrow keys). */
     setActiveRouteOption(idx) {
         this.activeRouteOptionIdx = idx;
         const opts = this.routeSearchDropdown?.querySelectorAll(".route-option") || [];
@@ -1017,6 +1042,7 @@ class StudentTracker {
         this.routeSearchInput?.setAttribute("aria-activedescendant", idx >= 0 ? `route-option-${idx}` : "");
     }
 
+    /** Hides the route drop-down. */
     closeRouteDropdown() {
         this.routeOptions = [];
         this.activeRouteOptionIdx = -1;
@@ -1028,6 +1054,7 @@ class StudentTracker {
         this.routeSearchInput?.removeAttribute("aria-activedescendant");
     }
 
+    /** Shows only the chosen route and its buses. */
     pickRoute(routeId) {
         this.closeRouteDropdown();
         this.routeFilter = routeId;
@@ -1056,17 +1083,20 @@ class StudentTracker {
         if (this.routeSearchClear) this.routeSearchClear.hidden = !route;
     }
 
+    /** Shows one bus's details and zooms to it. */
     selectBus(busId) {
         if (!this.latestBuses.some(b => b.bus_id === busId)) return;
         this.busFilter = busId;   // the route choice (if any) is kept for "back"
         this.afterSelectionChange();
     }
 
+    /** Back from a bus's details to the list. */
     sheetGoBack() {
         this.busFilter = null;    // back to the list you came from
         this.afterSelectionChange();
     }
 
+    /** Redraws the sheet and map after a route or bus was chosen. */
     afterSelectionChange() {
         this.syncRouteSearchBox();
         this.renderSheet(true);
@@ -1156,7 +1186,7 @@ class StudentTracker {
         if (this.busFilter) {
             const bus = this.latestBuses.find(b => b.bus_id === this.busFilter);
             const route = bus ? this.allRoutes.find(r => r.route_id === bus.assigned_route_id) : null;
-            this.sheetTitle.textContent = bus ? (bus.bus_name || bus.bus_number) : "Bus";
+            this.sheetTitle.textContent = bus ? (bus.bus_name || bus.bus_number) : RT("Bus");
             this.sheetContent.innerHTML = bus ? this.busDetailHtml(bus, route) : "";
             if (this.sheetCount) this.sheetCount.textContent = "";
         } else {
@@ -1164,7 +1194,7 @@ class StudentTracker {
                 ? this.latestBuses.filter(b => b.assigned_route_id === this.routeFilter)
                 : this.latestBuses;
             const liveFirst = [...list].sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0));
-            this.sheetTitle.textContent = this.routeFilter ? "Buses" : (window.APP_CONFIG?.text?.allBuses || "All buses");
+            this.sheetTitle.textContent = this.routeFilter ? RT("Buses") : RT("All buses");
             if (this.sheetCount) this.sheetCount.textContent = String(list.length);
             this.sheetContent.innerHTML = liveFirst.map(b => this.busRowHtml(b)).join("");
         }
@@ -1176,7 +1206,7 @@ class StudentTracker {
         const live = !!bus.is_active;
         const name = escapeHtml(bus.bus_name || bus.bus_number);
         return `
-            <button type="button" class="sheet-row" data-bus-id="${escapeHtml(bus.bus_id)}" aria-label="${name}, ${live ? "live" : "offline"}">
+            <button type="button" class="sheet-row" data-bus-id="${escapeHtml(bus.bus_id)}" aria-label="${name}, ${escapeHtml(live ? RT("live") : RT("offline"))}">
                 <span class="sheet-bus-dot ${live ? "is-live" : "is-offline"}" style="--bus-color:${escapeHtml(bus.color_hex || "#0866FF")}">${BUS_ICON_SVG}</span>
                 <span class="sheet-row-text">
                     <span class="sheet-row-title">${name}</span>
@@ -1190,16 +1220,16 @@ class StudentTracker {
         const live = !!bus.is_active;
         const cell = (label, value) => `
                     <div class="sheet-detail-cell">
-                        <div class="sheet-detail-label">${label}</div>
+                        <div class="sheet-detail-label">${escapeHtml(label)}</div>
                         <div class="sheet-detail-value">${value}</div>
                     </div>`;
         return `
             <div class="sheet-bus-detail">
                 <div class="sheet-detail-grid">
-                    ${cell("Speed", live ? `${Math.round(bus.speed_kmh || 0)} km/h` : "--")}
-                    ${cell("Next stop", live ? escapeHtml(bus.next_stop_name || "--") : "--")}
-                    ${cell("Route", escapeHtml(route ? route.route_name : bus.assigned_route_id))}
-                    ${cell("Driver", escapeHtml(bus.driver_name || "--"))}
+                    ${cell(RT("Speed"), live ? escapeHtml(RT("{speed} km/h", { speed: Math.round(bus.speed_kmh || 0) })) : "--")}
+                    ${cell(RT("Next stop"), live ? escapeHtml(bus.next_stop_name || "--") : "--")}
+                    ${cell(RT("Route"), escapeHtml(route ? route.route_name : bus.assigned_route_id))}
+                    ${cell(RT("Driver"), escapeHtml(bus.driver_name || "--"))}
                 </div>
             </div>`;
     }
@@ -1241,7 +1271,7 @@ class StudentTracker {
     triggerBrowserNotification(title, body) {
         if (!("Notification" in window) || Notification.permission !== "granted") return;
         try {
-            new Notification(title, { body, icon: "/static/img/favicon.svg" });
+            new Notification(title, { body, icon: "/favicon.svg" });
         } catch (e) {
             // not allowed in this context
         }

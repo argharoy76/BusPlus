@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% from "_ui.html" import logo, icon %}
+{% from "_ui.html" import logo, icon with context %}
+{% set t = words("rider_map") %}
 
-{% block title %}{{ site.APP_NAME }} · {{ portal_info.label }} map{% endblock %}
+{% block title %}{{ tab_title(t("{who} map", who=portal_info.label)) }}{% endblock %}
+
+{% block js_words %}{{ page_words("rider_map", "map", "bus_schedule") | tojson }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/student.css') }}">
@@ -18,10 +21,10 @@
     <div id="side-menu-backdrop" class="side-menu-backdrop" onclick="closeSideMenu()"></div>
 
     <!-- BusPlus Menu: drops down from under the bus icon -->
-    <aside id="side-menu-drawer" class="side-menu-drawer" data-page="main" aria-label="BusPlus menu" aria-hidden="true">
+    <aside id="side-menu-drawer" class="side-menu-drawer" data-page="main" aria-label="{{ t("Menu") }}" aria-hidden="true">
         <!-- Small top menu: just the app name and the rider's ID -->
         <div class="side-menu-header">
-            <span class="side-menu-title">{{ site.APP_NAME }}</span>
+            <span class="side-menu-title">{{ brand.APP_NAME }}</span>
             <span class="side-id-val" id="side-student-id">{{ rider_id }}</span>
         </div>
 
@@ -30,23 +33,23 @@
             <button type="button" class="side-menu-option" onclick="showMenuPage('home')">
                 <span class="side-option-icon">{{ icon("home") }}</span>
                 <span class="side-option-text">
-                    <span class="side-option-title">{{ site.MENU_HOME }}</span>
-                    <span class="side-option-sub" id="side-current-home-label">Malabotha More</span>
+                    <span class="side-option-title">{{ t("Home") }}</span>
+                    <span class="side-option-sub" id="side-current-home-label"></span>
                 </span>
                 <span class="side-option-chevron">›</span>
             </button>
             <button type="button" class="side-menu-option" onclick="showMenuPage('notification')">
                 <span class="side-option-icon">{{ icon("bell") }}</span>
                 <span class="side-option-text">
-                    <span class="side-option-title">{{ site.MENU_NOTIFICATION }}</span>
-                    <span class="side-option-sub" id="side-current-notif-label">5 min before · 1 time</span>
+                    <span class="side-option-title">{{ t("Notification") }}</span>
+                    <span class="side-option-sub" id="side-current-notif-label"></span>
                 </span>
                 <span class="side-option-chevron">›</span>
             </button>
             <button type="button" class="side-menu-option" onclick="openBusSchedule()">
                 <span class="side-option-icon">{{ icon("clock") }}</span>
                 <span class="side-option-text">
-                    <span class="side-option-title">{{ site.MENU_SCHEDULE }}</span>
+                    <span class="side-option-title">{{ t("Bus schedule") }}</span>
                 </span>
                 <span class="side-option-chevron">›</span>
             </button>
@@ -55,44 +58,44 @@
         <!-- Page 2: Edit Home -->
         <div class="side-menu-page side-page-edit" id="side-page-home">
             <div class="side-page-header">
-                <button type="button" class="side-back-btn" onclick="showMenuPage('main')" aria-label="Back">‹</button>
-                <span class="side-page-title">{{ site.MENU_HOME }}</span>
+                <button type="button" class="side-back-btn" onclick="showMenuPage('main')" aria-label="{{ t("Back") }}">‹</button>
+                <span class="side-page-title">{{ t("Home") }}</span>
             </div>
             <div class="side-page-body">
                 <div class="side-menu-section side-address-wrap">
-                    <label class="side-section-label" for="side-home-address-input">{{ site.HOME_ADDRESS_LABEL }}</label>
+                    <label class="side-section-label" for="side-home-address-input">{{ t("Home address") }}</label>
                     <input type="text" id="side-home-address-input" class="side-text-input" maxlength="120"
-                           placeholder="Start typing, e.g. Mal…" autocomplete="off"
+                           placeholder="{{ t("Start typing a stop name") }}" autocomplete="off"
                            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="side-home-suggestions">
                     <div id="side-home-suggestions" class="side-suggestions" role="listbox"></div>
                 </div>
-                <button type="button" class="side-save-btn" onclick="saveHomeAddress()">{{ site.SAVE_BUTTON }}</button>
+                <button type="button" class="side-save-btn" onclick="saveHomeAddress()">{{ t("Save") }}</button>
             </div>
         </div>
 
         <!-- Page 3: Edit Notification -->
         <div class="side-menu-page side-page-edit" id="side-page-notification">
             <div class="side-page-header">
-                <button type="button" class="side-back-btn" onclick="showMenuPage('main')" aria-label="Back">‹</button>
-                <span class="side-page-title">{{ site.MENU_NOTIFICATION }}</span>
+                <button type="button" class="side-back-btn" onclick="showMenuPage('main')" aria-label="{{ t("Back") }}">‹</button>
+                <span class="side-page-title">{{ t("Notification") }}</span>
             </div>
             <div class="side-page-body">
                 <div class="side-menu-section">
-                    <label class="side-section-label" for="side-custom-minutes-input">{{ site.NOTIFY_ME_LABEL }}</label>
+                    <label class="side-section-label" for="side-custom-minutes-input">{{ t("Notify me") }}</label>
                     <div class="side-minutes-box">
                         <input type="number" id="side-custom-minutes-input" class="side-minutes-input"
-                               min="1" max="120" step="1" inputmode="numeric" placeholder="5">
-                        <span class="side-minutes-unit">{{ site.NOTIFY_MINUTES_TEXT }}</span>
+                               min="1" max="{{ map_config.alertMinutesMax }}" step="1" inputmode="numeric" placeholder="5">
+                        <span class="side-minutes-unit">{{ t("minutes before the bus arrives") }}</span>
                     </div>
                     <div id="side-minutes-hint" class="side-minutes-hint" aria-live="polite"></div>
                 </div>
                 <div class="side-menu-section">
-                    <label class="side-section-label" for="side-frequency-select">{{ site.REPEAT_LABEL }}</label>
+                    <label class="side-section-label" for="side-frequency-select">{{ t("Repeat") }}</label>
                     <select id="side-frequency-select" class="side-select-control" onchange="changeAlertFrequency(this.value)">
-                        <option value="1">1 Time</option>
-                        <option value="2">2 Times</option>
-                        <option value="3">3 Times</option>
-                        <option value="continuous">Continuous</option>
+                        <option value="1">{{ t("Once") }}</option>
+                        <option value="2">{{ t("{count} times", count=2) }}</option>
+                        <option value="3">{{ t("{count} times", count=3) }}</option>
+                        <option value="continuous">{{ t("Until the bus arrives") }}</option>
                     </select>
                 </div>
             </div>
@@ -103,49 +106,49 @@
     <div class="phone-top-bar">
         <div class="top-bar-row">
             <!-- Icon-Only Trigger Button (Just the icon, NO text!) -->
-            <button id="btn-busplus-icon" class="busplus-icon-btn busplus-brand" onclick="toggleSideMenu()" title="Menu" aria-label="Open menu" aria-expanded="false" aria-controls="side-menu-drawer">
+            <button id="btn-busplus-icon" class="busplus-icon-btn busplus-brand" onclick="toggleSideMenu()" title="{{ t("Menu") }}" aria-label="{{ t("Menu") }}" aria-expanded="false" aria-controls="side-menu-drawer">
                 {{ logo("sm") }}
-                <span class="brand-name">{{ site.APP_NAME }}</span>
+                <span class="brand-name">{{ brand.APP_NAME }}</span>
             </button>
 
             <!-- Top Right Direct Log Out Button -->
-            <button class="logout-pill-btn" onclick="logoutStudent()" title="Log out">
-                {{ site.LOGOUT_BUTTON }}
+            <button class="logout-pill-btn" onclick="logoutStudent()" title="{{ t("Log out") }}">
+                {{ t("Log out") }}
             </button>
         </div>
     </div>
 
     <!-- 3. Minimal Clean GPS Floating Action Button (rides just above the bottom sheet) -->
-    <button id="btn-locate-me" class="phone-locate-fab" title="Locate My Position">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"/></svg><span>{{ site.LOCATE_ME_BUTTON }}</span>
+    <button id="btn-locate-me" class="phone-locate-fab" title="{{ t("Show my location") }}">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"/></svg><span>{{ t("Locate me") }}</span>
     </button>
 
     <!-- 4. Bottom Sheet: drag up/down like Google Maps -->
-    <section id="bus-sheet" class="bus-sheet" data-snap="peek" aria-label="Buses">
+    <section id="bus-sheet" class="bus-sheet" data-snap="peek" aria-label="{{ t("Buses") }}">
         <!-- Drag area: handle + route search + header -->
         <div class="bus-sheet-drag" id="bus-sheet-drag">
-            <button type="button" class="bus-sheet-grabber" id="bus-sheet-grabber" aria-label="Expand or collapse">
+            <button type="button" class="bus-sheet-grabber" id="bus-sheet-grabber" aria-label="{{ t("Expand or collapse") }}">
                 <span class="bus-sheet-handle"></span>
             </button>
 
             <!-- Select route: type any letter of a route name, pick it from the drop-down -->
             <div class="route-search" id="route-search">
-                <label class="route-search-label" for="route-search-input">{{ site.SELECT_ROUTE_LABEL }}</label>
+                <label class="route-search-label" for="route-search-input">{{ t("Select route") }}</label>
                 <div class="route-search-box">
                     <span class="route-search-icon"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span>
                     <span class="route-search-swatch" id="route-search-swatch" hidden></span>
                     <input type="text" id="route-search-input" class="route-search-input"
-                           placeholder="{{ site.ROUTE_SEARCH_PLACEHOLDER }}" autocomplete="off" spellcheck="false"
+                           placeholder="{{ t("Route name") }}" autocomplete="off" spellcheck="false"
                            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="route-search-dropdown">
-                    <button type="button" class="route-search-clear" id="route-search-clear" aria-label="Clear route" hidden>✕</button>
+                    <button type="button" class="route-search-clear" id="route-search-clear" aria-label="{{ t("Clear route") }}" hidden>✕</button>
                 </div>
                 <div class="route-search-dropdown" id="route-search-dropdown" role="listbox"></div>
             </div>
 
             <div class="bus-sheet-header">
-                <button type="button" class="bus-sheet-back" id="bus-sheet-back" aria-label="Back" hidden>‹</button>
+                <button type="button" class="bus-sheet-back" id="bus-sheet-back" aria-label="{{ t("Back") }}" hidden>‹</button>
                 <div class="bus-sheet-titles">
-                    <div class="bus-sheet-title-row"><div class="bus-sheet-title" id="bus-sheet-title">{{ site.ALL_BUSES_TITLE }}</div><span class="bus-sheet-count" id="bus-sheet-count"></span></div>
+                    <div class="bus-sheet-title-row"><div class="bus-sheet-title" id="bus-sheet-title">{{ t("All buses") }}</div><span class="bus-sheet-count" id="bus-sheet-count"></span></div>
                 </div>
             </div>
 

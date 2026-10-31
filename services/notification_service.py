@@ -9,6 +9,7 @@ rider's chosen number of minutes, an alert that makes the phone chime.
 from models.bus import Bus
 from models.route import BusRoute, BusStop
 from services import geo
+from services.words import say
 
 ARRIVED_RADIUS_KM = 0.15      # this close to the stop = the bus is here
 PASSED_MARGIN_KM = 0.25       # a bus past the stop and further than this has gone by
@@ -45,13 +46,13 @@ def arrival_alert(bus: Bus, route: BusRoute, stop: BusStop, notify_minutes: floa
     }
 
     if not bus.is_active:
-        return {**base, "urgency_level": "IDLE", "alert_title": f"{bus.bus_name} is offline"}
+        return {**base, "urgency_level": "IDLE", "alert_title": say("{bus} is offline", bus=bus.bus_name)}
 
     distance_now = geo.distance_km(bus.current_latitude, bus.current_longitude, stop.latitude, stop.longitude)
     stop_index = stop.sequence_order - 1
     if bus.current_stop_index > stop_index and distance_now > PASSED_MARGIN_KM:
         return {**base, "urgency_level": "PASSED", "distance_km": round(distance_now, 2),
-                "alert_title": f"{bus.bus_name} has passed {stop.stop_name}"}
+                "alert_title": say("{bus} has passed {stop}", bus=bus.bus_name, stop=stop.stop_name)}
 
     eta = geo.estimate_eta(bus.current_latitude, bus.current_longitude, stop.latitude, stop.longitude,
                            bus_speed_kmh=bus.speed_kmh,
@@ -59,17 +60,22 @@ def arrival_alert(bus: Bus, route: BusRoute, stop: BusStop, notify_minutes: floa
     minutes, km, clock = eta["eta_minutes"], eta["distance_km"], eta["estimated_arrival_clock_time"]
 
     if km <= ARRIVED_RADIUS_KM:
-        level, title = "ARRIVED", f"{bus.bus_name} is at {stop.stop_name}!"
-        message = "Your bus has reached your stop. Please board now."
+        level, title = "ARRIVED", say("{bus} is at {stop}!", bus=bus.bus_name, stop=stop.stop_name)
+        message = say("Your bus has reached your stop. Please board now.")
     elif minutes <= CRITICAL_MINUTES:
-        level, title = "CRITICAL", f"{bus.bus_name} arrives in ~{max(1, int(minutes))} min!"
-        message = f"Only {km} km from {stop.stop_name}. Be ready at the curb (about {clock})."
+        level, title = "CRITICAL", say("{bus} arrives in ~{minutes} min!", bus=bus.bus_name,
+                                        minutes=max(1, int(minutes)))
+        message = say("Only {km} km from {stop}. Be ready at the curb (about {clock}).", km=km, stop=stop.stop_name,
+                      clock=clock)
     elif minutes <= notify_minutes:
-        level, title = "WARNING", f"{bus.bus_name} is ~{int(minutes)} min from {stop.stop_name}"
-        message = f"About {round(minutes, 1)} minutes away ({km} km). Expected at {clock}."
+        level, title = "WARNING", say("{bus} is ~{minutes} min from {stop}", bus=bus.bus_name, minutes=int(minutes),
+                                      stop=stop.stop_name)
+        message = say("About {minutes} minutes away ({km} km). Expected at {clock}.", minutes=round(minutes, 1), km=km,
+                      clock=clock)
     else:
-        level, title = "INFO", f"{bus.bus_name} is on the way"
-        message = f"Heading to {stop.stop_name}. ETA {round(minutes, 1)} min ({clock})."
+        level, title = "INFO", say("{bus} is on the way", bus=bus.bus_name)
+        message = say("Heading to {stop}. ETA {minutes} min ({clock}).", stop=stop.stop_name, minutes=round(minutes, 1),
+                      clock=clock)
 
     triggered = level != "INFO"
     return {**base, "urgency_level": level, "alert_title": title, "alert_message": message,

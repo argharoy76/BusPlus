@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% from "_ui.html" import logo, icon %}
+{% from "_ui.html" import logo, icon with context %}
+{% set t = words("login_pages") %}
 
-{% block title %}{{ driver_button.label }} Login · {{ site.APP_NAME }}{% endblock %}
+{% block title %}{{ tab_title(t("{who} login", who=driver_button.label)) }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
@@ -10,35 +11,35 @@
 {% block content %}
 <div class="lp lp-form-page" style="--accent: {{ driver_button.color }}">
     <header class="lp-topbar">
-        <a href="{{ url_for('views.landing') }}" class="lp-back" aria-label="Back">{{ icon("back") }}</a>
+        <a href="{{ url_for('views.landing') }}" class="lp-back" aria-label="{{ t("Back") }}">{{ icon("back") }}</a>
         {{ logo("sm") }}
     </header>
 
-    <h1 class="lp-form-title">{{ driver_button.label }} login</h1>
+    <h1 class="lp-form-title">{{ t("{who} login", who=driver_button.label) }}</h1>
 
     <div id="login-error-box" class="lp-error" role="alert"></div>
 
     <form id="driver-login-form" class="lp-form" novalidate>
         <label class="lp-field lp-field-suggest">
-            <span class="lp-label">Name</span>
-            <input type="text" id="input-driver-name" class="lp-input" placeholder="Your name" autocomplete="off" required>
+            <span class="lp-label">{{ t("Name") }}</span>
+            <input type="text" id="input-driver-name" class="lp-input" placeholder="{{ t("Your name") }}" autocomplete="off" required>
             <input type="hidden" id="hidden-driver-id">
             <div id="driver-suggestions" class="fluid-autocomplete-dropdown"></div>
         </label>
         <label class="lp-field">
-            <span class="lp-label">Route</span>
+            <span class="lp-label">{{ t("Route") }}</span>
             <select id="select-driver-route" class="lp-input lp-select" required>
-                <option value="" disabled selected>Select route</option>
+                <option value="" disabled selected>{{ t("Select route") }}</option>
                 {% for r in routes %}
                 <option value="{{ r.route_id }}">{{ r.route_name }}</option>
                 {% endfor %}
             </select>
         </label>
         <label class="lp-field">
-            <span class="lp-label">PIN</span>
+            <span class="lp-label">{{ t("PIN") }}</span>
             <input type="password" id="input-driver-pin" class="lp-input" placeholder="••••" inputmode="numeric" autocomplete="current-password" required>
         </label>
-        <button type="submit" class="lp-submit">{{ site.DRIVER_LOGIN_BUTTON_TEXT }}</button>
+        <button type="submit" class="lp-submit">{{ t("Log in") }}</button>
     </form>
 </div>
 
@@ -151,11 +152,11 @@
             if (data.success) {
                 window.location.href = data.redirect_url || "/driver/dashboard";
             } else {
-                errorBox.textContent = data.message || "Invalid credentials. Please try again.";
+                errorBox.textContent = data.message || {{ t("Wrong name or PIN. Please try again.") | tojson }};
                 errorBox.style.display = "block";
             }
         } catch (err) {
-            errorBox.textContent = "Connection error. Please try again.";
+            errorBox.textContent = {{ t("Connection error. Please check your internet and try again.") | tojson }};
             errorBox.style.display = "block";
         }
     });

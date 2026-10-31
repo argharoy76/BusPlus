@@ -9,9 +9,11 @@ The front-end pages (HTML).
                          (rider types are listed in content/user_types.py)
 """
 
-from flask import Blueprint, abort, redirect, render_template, session, url_for
+from flask import Blueprint, Response, abort, redirect, render_template, session, url_for
+from markupsafe import escape
 
 from config import Config
+from content import branding, colors
 from extensions import talisman
 from models.rider_types import rider_info
 from services import tracking, users
@@ -22,6 +24,17 @@ view_bp = Blueprint("views", __name__)
 def landing():
     """Start page: the Driver button and one button per rider type (content/user_types.py)."""
     return render_template("landing.html")
+
+
+@view_bp.get("/favicon.svg")
+def favicon():
+    """Browser-tab icon: the logo emoji on a rounded square in the brand colour (content/branding.py, colors.py)."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+        f'<rect width="64" height="64" rx="16" fill="{escape(colors.THEME["brand"])}"/>'
+        f'<text x="32" y="44" font-size="36" text-anchor="middle">{escape(branding.LOGO_EMOJI)}</text></svg>'
+    )
+    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "public, max-age=3600"})
 
 
 @view_bp.get("/health")

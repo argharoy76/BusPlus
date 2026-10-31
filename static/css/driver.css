@@ -6,10 +6,10 @@
  */
 
 :root {
-    --drv-blue: #0866ff;
-    --drv-blue-gradient: linear-gradient(135deg, #0866ff 0%, #1877f2 50%, #0052cc 100%);
-    --drv-text: #0f172a;
-    --drv-muted: #64748b;
+    --drv-blue: var(--bp-brand);
+    --drv-blue-gradient: linear-gradient(135deg, var(--bp-brand) 0%, color-mix(in srgb, var(--bp-brand) 70%, #000) 100%);
+    --drv-text: var(--bp-text);
+    --drv-muted: var(--bp-muted);
     --drv-border: #e2e8f0;
 }
 
@@ -87,7 +87,7 @@ button {
 }
 
 .drv-icon-btn.menu-open {
-    box-shadow: 0 0 0 3px rgba(8, 102, 255, 0.25), 0 4px 14px rgba(15, 23, 42, 0.22);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bp-brand) 25%, transparent), 0 4px 14px rgba(15, 23, 42, 0.22);
 }
 
 .drv-gps-dot {
@@ -397,7 +397,7 @@ button {
 }
 
 .drv-gps-state.on { color: #059669; }
-.drv-gps-state.off { color: #dc2626; }
+.drv-gps-state.off { color: var(--bp-danger); }
 .drv-gps-state.off-duty { color: var(--drv-muted); }
 
 .drv-gps-retry {
@@ -449,7 +449,7 @@ button {
 }
 
 .drv-switch:focus-visible {
-    outline: 3px solid rgba(8, 102, 255, 0.4);
+    outline: 3px solid color-mix(in srgb, var(--bp-brand) 40%, transparent);
     outline-offset: 2px;
 }
 
@@ -461,7 +461,7 @@ button {
     border-radius: 12px;
     border: 1px solid #fecaca;
     background: #fef2f2;
-    color: #dc2626;
+    color: var(--bp-danger);
     font-size: 0.88rem;
     font-weight: 800;
     cursor: pointer;
@@ -478,7 +478,7 @@ button {
     margin: 0 auto;
     padding: 12px 14px;
     border-radius: 14px;
-    background: #0f172a;
+    background: var(--bp-text);
     color: #ffffff;
     font-size: 0.85rem;
     font-weight: 600;
@@ -520,7 +520,7 @@ button {
     background: #f8fafc;
     font: inherit;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--bp-text);
     cursor: pointer;
 }
 .drv-schedule-btn:hover { background: #f1f5f9; }

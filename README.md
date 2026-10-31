@@ -32,7 +32,7 @@ Optional: copy `.env.example` to `.env` to choose your own settings.
 
 ### Change the website easily: the `content/` folder
 
-Names, start-page buttons (add **Passenger** in `content/user_types.py` and it appears everywhere), map centre, final stop, colours and rules are plain settings in `content/`. Edit, save, restart. A short guide to the whole codebase is in **README.txt**.
+Every text on every page (front end, backend and server messages) is in `content/words/`, one file per page. Names, logo, colours, start-page buttons (add **Passenger** in `content/user_types.py` and it appears everywhere), map settings and rules are plain settings in `content/`. Edit, save, refresh. A short guide to the codebase is in **README.txt**; every feature, library and function is mapped in **README_SPECS.txt**.
 
 ### Tests and code checks
 

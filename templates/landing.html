@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% from "_ui.html" import logo, icon, rider_icon %}
+{% from "_ui.html" import logo, icon with context %}
 
-{% block title %}{{ site.APP_NAME }} · {{ site.UNIVERSITY_NAME }}{% endblock %}
+{% block title %}{{ tab_title() }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
@@ -11,20 +11,20 @@
 <div class="lp">
     <header class="lp-brand">
         {{ logo("lg") }}
-        <h1 class="lp-title">{{ site.APP_NAME }}</h1>
-        <p class="lp-subtitle">{{ site.UNIVERSITY_NAME }}</p>
+        <h1 class="lp-title">{{ brand.APP_NAME }}</h1>
+        <p class="lp-subtitle">{{ brand.UNIVERSITY_NAME }}</p>
     </header>
 
-    {# Driver first, then one option per rider type (content/user_types.py) #}
+    {# Driver first, then one option per rider type (content/user_types.py). Name and university: content/branding.py #}
     <nav class="lp-options">
         <a href="{{ url_for('views.driver_login') }}" class="lp-option" style="--accent: {{ driver_button.color }}">
-            <span class="lp-option-icon">{{ rider_icon("driver") }}</span>
+            <span class="lp-option-icon">{{ icon(driver_button.icon) }}</span>
             <span class="lp-option-label">{{ driver_button.label }}</span>
             {{ icon("chevron", "lp-option-chevron") }}
         </a>
         {% for key, rider in rider_types.items() %}
         <a href="{{ url_for('views.rider_login', rider_type=key) }}" class="lp-option" style="--accent: {{ rider.color }}">
-            <span class="lp-option-icon">{{ rider_icon(key) }}</span>
+            <span class="lp-option-icon">{{ icon(rider.icon) }}</span>
             <span class="lp-option-label">{{ rider.label }}</span>
             {{ icon("chevron", "lp-option-chevron") }}
         </a>

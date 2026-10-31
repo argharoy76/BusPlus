@@ -13,19 +13,24 @@ RUN IT
   Demo drivers (your computer only): e.g. "Md. Rafiqul Islam", PIN 1234
   Tests: pip install -r requirements-dev.txt, then: pytest
 
-CHANGE THE WEBSITE  ->  the content/ folder (plain settings, open in VS Code, restart after saving)
-  site_text.py      app name, university name, and the words on pages, map menus and driver menu
+CHANGE THE WEBSITE  ->  the content/ folder (no code needed; save, then refresh the browser)
+  branding.py       app name, university name, logo emoji, browser-tab titles
+  colors.py         website colours (brand, background, text, ...), bus and route colours
   user_types.py     start-page buttons. Add "passenger" there and it gets a button, sign-in page,
                     live map, a choice in the backend's Buses tab and an entry in its Users tab.
-  map_settings.py   map centre + start zoom, Map/Satellite/Traffic layers (tile URLs),
-                    final stop (Hadi Chattar), time zone, country box
-  colors.py         bus / route / app colours
+  map_settings.py   map centre + zoom, Map/Satellite/Traffic layers (tile URLs), final stop
+                    (Hadi Chattar), default Home stop, time zone, country box
   rules.py          PIN length, driver lock time, GPS send speed, map refresh, bus seats,
                     test-drive speed, trail length, alert minutes, login limits
   starting_data.py  routes, buses, demo drivers and starting bus schedules for a new database
-  How it reaches the pages: Python files read content/ directly; HTML gets it through
-  app.py (content_for_templates); map JavaScript gets it as window.APP_CONFIG
-  (templates/_map_assets.html).
+  words/            EVERY text on the site, one file per page: login_pages, rider_map, driver_map,
+                    bus_schedule, map, backend_login, backend, server_messages.
+                    Each line is  "Original": "Shown text"  - change only the right side.
+  How it reaches the pages: Python reads content/ directly; HTML gets it through app.py
+  (content_for_templates); JavaScript gets map settings as window.APP_CONFIG and words as
+  window.WORDS. services/words.py does the word look-ups; tests/test_words.py checks that every
+  text on the site is in content/words/ and nothing there is unused.
+  Full guide: content/__init__.py.   Every function and library in detail: README_SPECS.txt
 
 
 HOW IT WORKS (one request, start to end)
@@ -76,7 +81,7 @@ FILES AND THEIR MAIN FUNCTIONS
   extensions.py        db, csrf, limiter, talisman objects
 
   controllers/  (the URLs)
-    view_controller    landing, driver_login, driver_dashboard, rider_login, rider_dashboard, health
+    view_controller    landing, favicon, driver_login, driver_dashboard, rider_login, rider_dashboard, health
     auth_controller    admin_login, driver_login, rider_login, logout, search_drivers
     bus_controller     list_buses, stream_buses (live feed), driver_location, start_trip,
                        stop_trip (online/offline), driver_assignment (today's duty card)
@@ -98,6 +103,7 @@ FILES AND THEIR MAIN FUNCTIONS
                        save_timetable, seed_timetables: one weekly timetable per route, set day by
                        day; morning = bus + time it reaches campus, afternoon = bus + time it leaves
     store              save / delete / all_rows, seed_defaults (first start), record_rider
+    words              words / say / page_words: the texts from content/words/
 
   models/  (the data)
     records.py         database tables: RouteRecord, BusRecord, DriverRecord, RiderRecord,
@@ -109,9 +115,10 @@ FILES AND THEIR MAIN FUNCTIONS
   templates/  (HTML pages, Jinja)
     landing, driver_login, driver_dashboard, student_login + student_dashboard (used by every
     rider type), admin_login, admin_dashboard, base (shared head), _map_assets (map files),
-    _schedule_popup (the "Bus schedule" pop-up for riders and drivers)
+    _schedule_popup (the "Bus schedule" pop-up for riders and drivers), _ui (logo + icons),
+    _theme (colours + tab icon)
   static/js/
-    common.js          adds the CSRF token to every fetch()
+    common.js          adds the CSRF token to every fetch(); words() look-up for content/words/
     google_maps_helper.js  GoogleMapsHelper: map, markers (gliding), route lines, trails
     student_tracker.js StudentTracker + BottomSheet: rider map, route search, home, alerts
     driver_tracker.js  DriverApp: GPS sending, online/offline switch, duty card

@@ -20,11 +20,12 @@ try:
     from werkzeug.middleware.proxy_fix import ProxyFix
 
     from config import Config
-    from content import colors, map_settings, rules, site_text
+    from content import branding, colors, map_settings, rules
     from controllers import ALL_BLUEPRINTS
     from extensions import csrf, db, limiter, talisman
     from models.rider_types import DRIVER, RIDER_TYPES
     from services import schedule_service, store, tracking, users
+    from services.words import fill, page_words, say, words
 except ModuleNotFoundError as missing:
     # A library from requirements.txt isn't installed yet: say how to fix it instead of a long error.
     raise SystemExit(f"\nMissing library: {missing.name}\nInstall BusPlus's libraries first, then start again:\n"
@@ -101,25 +102,35 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     def content_for_templates() -> dict:
         """Settings from the content/ folder, available in every HTML template."""
         return {
-            "site": site_text,                    # {{ site.APP_NAME }}, {{ site.UNIVERSITY_NAME }}, ...
+            "brand": branding,                    # {{ brand.APP_NAME }}, {{ brand.LOGO_EMOJI }} (content/branding.py)
+            "theme": colors.THEME,                # colours -> CSS variables (templates/_theme.html)
+            "words": words,                       # {% set t = words("rider_map") %} {{ t("Home") }}
+            "page_words": page_words,             # the same words for the page's JavaScript
+            "tab_title": _tab_title,              # browser tab title (content/branding.py)
             "rider_types": RIDER_TYPES,           # Student, Teacher, ... (content/user_types.py)
             "driver_button": DRIVER,
-            "brand_color": colors.BRAND_COLOR,
             "pin_rules": {"min": rules.PIN_MIN_DIGITS, "max": rules.PIN_MAX_DIGITS},
             # Map and timing settings for the map pages' JavaScript (templates/_map_assets.html)
             "map_config": {
                 "layers": map_settings.MAP_LAYERS,
                 "zoom": map_settings.MAP_START_ZOOM,
                 "credit": map_settings.MAP_CREDIT,
+                "defaultHome": map_settings.DEFAULT_HOME,
+                "trailColor": colors.THEME["bus_trail"],
                 "gpsSendEveryMs": int(rules.GPS_SEND_EVERY_SECONDS * 1000),
                 "gpsSendAfterMeters": rules.GPS_SEND_AFTER_METERS,
                 "refreshMs": int(rules.MAP_REFRESH_SECONDS * 1000),
-                "text": {"online": site_text.DRIVER_ONLINE, "offline": site_text.DRIVER_OFFLINE,
-                         "allBuses": site_text.ALL_BUSES_TITLE},
+                "alertMinutesMax": rules.MAX_ALERT_MINUTES,
             },
         }
 
     return app
+
+
+def _tab_title(page: str | None = None) -> str:
+    """Browser tab title, e.g. "Student login · BusPlus" (patterns in content/branding.py)."""
+    pattern = branding.TAB_TITLE if page else branding.START_PAGE_TAB_TITLE
+    return fill(pattern, app=branding.APP_NAME, university=branding.UNIVERSITY_NAME, page=page or "")
 
 
 def _add_static_versions(app: Flask) -> None:
@@ -147,21 +158,23 @@ def _register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(CSRFError)
     def csrf_error(err):
-        message = "This page has expired. Please reload it and try again."
+        message = say("This page has expired. Please reload it and try again.")
         return (jsonify(success=False, message=message), 400) if wants_json() else (message, 400)
 
     @app.errorhandler(429)
     def too_many_requests(err):
-        message = "Too many attempts. Please wait a minute and try again."
+        message = say("Too many attempts. Please wait a minute and try again.")
         return (jsonify(success=False, message=message), 429) if wants_json() else (message, 429)
 
     @app.errorhandler(404)
     def not_found(err):
-        return (jsonify(success=False, message="Not found."), 404) if wants_json() else ("Page not found.", 404)
+        if wants_json():
+            return jsonify(success=False, message=say("Not found.")), 404
+        return say("Page not found."), 404
 
     @app.errorhandler(500)
     def server_error(err):
-        message = "Something went wrong on the server. Please try again."
+        message = say("Something went wrong on the server. Please try again.")
         return (jsonify(success=False, message=message), 500) if wants_json() else (message, 500)
 
 

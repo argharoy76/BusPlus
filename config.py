@@ -16,7 +16,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from content import map_settings, rules, site_text
+from content import branding, map_settings, rules
 
 BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"          # database + local secrets (ignored by Git)
@@ -124,7 +124,7 @@ class Config:
     # ------------------------------------------------------------------
     # BusPlus constants - edit them in the content/ folder, not here.
     # ------------------------------------------------------------------
-    UNIVERSITY_NAME = site_text.UNIVERSITY_NAME
+    UNIVERSITY_NAME = branding.UNIVERSITY_NAME
     UNIVERSITY_LOCATION = map_settings.MAP_CENTER          # map centre before any bus/home is known
     FINAL_DESTINATION = map_settings.FINAL_DESTINATION     # last stop of every route (Hadi Chattar)
     TIMEZONE = map_settings.TIMEZONE

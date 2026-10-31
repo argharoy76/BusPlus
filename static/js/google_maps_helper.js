@@ -5,7 +5,11 @@
  * route lines, live bus markers (they glide between GPS fixes), the red trail each
  * bus has driven, the rider's GPS position and the Home dot.
  * Page scripts use the single shared instance: window.googleMapsHelper.
+ * Words: content/words/map.py (the MT look-up below). Layers, credit, trail colour: content/ folder via APP_CONFIG.
  */
+
+/** Words shown on every map, from content/words/map.py. */
+const MT = words("map");
 
 /** Makes text safe to put inside HTML (names, messages, anything from the server). */
 function escapeHtml(value) {
@@ -30,6 +34,7 @@ const CLEAN_MAP_STYLE = encodeURIComponent(
     "s.e:l.i|p.v:off"     // all POI icons
 );
 
+/** Everything drawn on a map; one shared instance: window.googleMapsHelper. */
 class GoogleMapsHelper {
     constructor() {
         const ku = window.APP_CONFIG?.universityLocation || {};
@@ -83,7 +88,7 @@ class GoogleMapsHelper {
             const badge = L.control({ position: "bottomright" });
             badge.onAdd = () => {
                 const div = L.DomUtil.create("div", "gmap-attrib-pill");
-                div.textContent = window.APP_CONFIG?.credit || "Google Maps";
+                div.textContent = window.APP_CONFIG?.credit || "";
                 return div;
             };
             badge.addTo(this.leafletMap);
@@ -139,6 +144,7 @@ class GoogleMapsHelper {
         activeBuses.forEach(bus => this.updateBusMarker(bus));
     }
 
+    /** Takes one bus marker off the map. */
     removeBusMarker(id) {
         this.busMarkers[id]?.remove();
         delete this.busMarkers[id];
@@ -171,7 +177,7 @@ class GoogleMapsHelper {
                 const headingEl = el.querySelector(".gmap-bus-heading");
                 if (headingEl) headingEl.style.transform = `rotate(${heading}deg)`;   // only the arrow turns
                 const speedTag = el.querySelector(".gmap-bus-speed-tag");
-                if (speedTag) speedTag.textContent = `${speed} km/h`;
+                if (speedTag) speedTag.textContent = MT("{speed} km/h", { speed });
             }
             // Keep an open popup (driver map) in step with the live data
             if (marker.getPopup()) marker.setPopupContent(this.busPopupHtml(bus, speed, heading));
@@ -189,7 +195,7 @@ class GoogleMapsHelper {
                         </div>
                         <svg class="gmap-bus-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BUS_SVG_PATHS}</svg>
                     </div>
-                    <div class="gmap-bus-speed-tag">${speed} km/h</div>
+                    <div class="gmap-bus-speed-tag">${escapeHtml(MT("{speed} km/h", { speed }))}</div>
                 </div>`,
             iconSize: [44, 44],
             iconAnchor: [22, 22]
@@ -233,12 +239,12 @@ class GoogleMapsHelper {
             <div class="gmap-card-popup">
                 <div class="gmap-card-popup-header">
                     <h4 class="gmap-card-title">${escapeHtml(bus.bus_number)}</h4>
-                    <span class="gmap-badge-live">● LIVE GPS</span>
+                    <span class="gmap-badge-live">${escapeHtml(MT("Live"))}</span>
                 </div>
                 <p class="gmap-card-sub">${escapeHtml(bus.bus_name)}</p>
-                <p class="gmap-card-metric">Route: <b>${escapeHtml(bus.route_name || bus.assigned_route_id)}</b></p>
-                <p class="gmap-card-metric">Speed: <b>${speed} km/h</b> (Heading ${Math.round(heading)}°)</p>
-                <p class="gmap-card-metric">Approaching: <b>${escapeHtml(bus.next_stop_name || "En route to KU")}</b></p>
+                <p class="gmap-card-metric">${escapeHtml(MT("Route"))}: <b>${escapeHtml(bus.route_name || bus.assigned_route_id)}</b></p>
+                <p class="gmap-card-metric">${escapeHtml(MT("Speed"))}: <b>${escapeHtml(MT("{speed} km/h", { speed }))}</b></p>
+                <p class="gmap-card-metric">${escapeHtml(MT("Next stop"))}: <b>${escapeHtml(bus.next_stop_name || MT("On the way"))}</b></p>
             </div>`;
     }
 
@@ -261,7 +267,7 @@ class GoogleMapsHelper {
                 this.trails[bus.bus_id].setLatLngs(pts);
             } else {
                 this.trails[bus.bus_id] = L.polyline(pts, {
-                    color: "#DC2626", weight: 5, opacity: 0.9, lineJoin: "round", lineCap: "round", interactive: false
+                    color: window.APP_CONFIG?.trailColor || "#DC2626", weight: 5, opacity: 0.9, lineJoin: "round", lineCap: "round", interactive: false
                 }).addTo(this.leafletMap);
             }
             this.trails[bus.bus_id].bringToFront();   // always above the route lines
@@ -295,7 +301,7 @@ class GoogleMapsHelper {
             const icon = L.divIcon({
                 className: "gmap-student-icon-wrap",
                 html: `
-                    <div class="gmap-student-beacon" title="Your GPS Location">
+                    <div class="gmap-student-beacon" title="${escapeHtml(MT("Your location"))}">
                         <div class="gmap-student-beacon-wave"></div>
                         <div class="gmap-student-beacon-dot"></div>
                     </div>`,
@@ -305,8 +311,8 @@ class GoogleMapsHelper {
             this.studentMarker = L.marker(latLng, { icon, zIndexOffset: 2000 }).addTo(this.leafletMap);
             this.studentMarker.bindPopup(`
                 <div class="gmap-card-popup">
-                    <h4 class="gmap-card-title">Your location</h4>
-                    <p class="gmap-card-metric">GPS Accuracy: ±${Math.round(accuracy)}m</p>
+                    <h4 class="gmap-card-title">${escapeHtml(MT("Your location"))}</h4>
+                    <p class="gmap-card-metric">${escapeHtml(MT("Accurate to about {meters} m", { meters: Math.round(accuracy) }))}</p>
                 </div>`);
         }
         this.leafletMap.flyTo(latLng, 15, { duration: 1.2 });

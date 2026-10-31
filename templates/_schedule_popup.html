@@ -1,26 +1,27 @@
 {# "Bus schedule" pop-up for riders and drivers: today's buses of one route.
-   Opened from JavaScript with BusSchedule.open({ routeId, audience }). Words: content/site_text.py #}
+   Opened from JavaScript with BusSchedule.open({ routeId, audience }). Words: content/words/bus_schedule.py #}
+{% set t = words("bus_schedule") %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/schedule.css') }}">
 <div class="sched-overlay" id="sched-overlay" hidden>
     <div class="sched-card" role="dialog" aria-modal="true" aria-labelledby="sched-title">
         <header class="sched-head">
             <div>
-                <h3 class="sched-title" id="sched-title">{{ site.SCHEDULE_TITLE }}</h3>
-                <div class="sched-day"><span class="sched-day-dot"></span>{{ site.SCHEDULE_TODAY }} · <span id="sched-day-name"></span></div>
+                <h3 class="sched-title" id="sched-title">{{ t("Bus schedule") }}</h3>
+                <div class="sched-day"><span class="sched-day-dot"></span>{{ t("Today") }} · <span id="sched-day-name"></span></div>
             </div>
-            <button type="button" class="sched-close" id="sched-close" aria-label="Close">
+            <button type="button" class="sched-close" id="sched-close" aria-label="{{ t("Close") }}">
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
             </button>
         </header>
 
         <div class="sched-route-wrap">
             <span class="sched-route-swatch" id="sched-route-swatch"></span>
-            <select id="sched-route" class="sched-select" aria-label="Route"></select>
+            <select id="sched-route" class="sched-select" aria-label="{{ t("Route") }}"></select>
         </div>
 
         <div class="sched-tabs" role="tablist">
-            <button type="button" class="sched-tab" role="tab" data-part="morning">{{ site.SCHEDULE_MORNING }}</button>
-            <button type="button" class="sched-tab" role="tab" data-part="afternoon">{{ site.SCHEDULE_AFTERNOON }}</button>
+            <button type="button" class="sched-tab" role="tab" data-part="morning">{{ t("Morning") }}</button>
+            <button type="button" class="sched-tab" role="tab" data-part="afternoon">{{ t("Afternoon") }}</button>
         </div>
 
         <div class="sched-list-head">
@@ -30,10 +31,4 @@
         <ul class="sched-list" id="sched-list" aria-live="polite"></ul>
     </div>
 </div>
-<script>
-    window.SCHEDULE_TEXT = {{ {
-        "morningTime": site.SCHEDULE_MORNING_TIME, "afternoonTime": site.SCHEDULE_AFTERNOON_TIME,
-        "noBus": site.SCHEDULE_NO_BUS
-    } | tojson }};
-</script>
 <script src="{{ url_for('static', filename='js/schedule.js') }}"></script>

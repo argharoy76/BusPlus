@@ -13,6 +13,8 @@ from content.user_types import DRIVER, RIDER_TYPES
 # Words already used in web addresses, so they can't be rider type keys.
 RESERVED_KEYS = {"driver", "admin", "backend", "api", "static", "health"}
 REQUIRED_FIELDS = ("label", "plural", "id_label", "icon", "color")
+# Pictures the "icon" setting may name (drawn by templates/_ui.html).
+ICON_NAMES = ("cap", "briefcase", "user", "users", "suitcase", "book", "id", "star", "bus", "steering")
 
 
 def _check_rider_types() -> None:
@@ -28,6 +30,9 @@ def _check_rider_types() -> None:
             raise ValueError(f"{where}: missing {', '.join(missing)}.")
         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", info["color"]):
             raise ValueError(f'{where}: color must look like "#059669".')
+    for name, info in [*RIDER_TYPES.items(), ("driver", DRIVER)]:
+        if info.get("icon") not in ICON_NAMES:
+            raise ValueError(f'content/user_types.py, "{name}": icon must be one of {", ".join(ICON_NAMES)}.')
 
 
 _check_rider_types()

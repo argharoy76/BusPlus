@@ -14,11 +14,12 @@ import re
 
 from sqlalchemy import select
 
-from content.site_text import DAY_NAMES
 from content.starting_data import SCHEDULES as STARTING_SCHEDULES
+from content.words.bus_schedule import DAY_NAMES
 from extensions import db
 from models.records import TimetableRecord
 from services import geo, store, tracking
+from services.words import say
 
 TIME_24H_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 DAYS = tuple(DAY_NAMES)              # ("sat", "sun", "mon", "tue", "wed", "thu", "fri")
@@ -82,13 +83,13 @@ def save_timetable(route_id: str, data: dict) -> dict:
     Raises LookupError (no such route) or ValueError (bad input, readable message).
     """
     if tracking.get_route(route_id) is None:
-        raise LookupError(f"Route {route_id} not found.")
+        raise LookupError(say("Route {id} not found.", id=route_id))
     raw_days = data.get("days")
     if not isinstance(raw_days, dict):
-        raise ValueError("The timetable is not valid.")
+        raise ValueError(say("The timetable is not valid."))
     unknown = set(raw_days) - set(DAYS)
     if unknown:
-        raise ValueError(f"Unknown day: {', '.join(sorted(unknown))}.")
+        raise ValueError(say("Unknown day: {days}.", days=", ".join(sorted(unknown))))
     days = {day: {part: _clean_trips(raw_days.get(day, {}).get(part), DAY_NAMES[day], part) for part in PARTS}
             for day in DAYS}
     store.save(TimetableRecord(route_id=route_id, days=days))
@@ -118,14 +119,14 @@ def _clean_trips(trips, day_name: str, part: str) -> list[dict]:
     if not trips:
         return []
     if not isinstance(trips, list) or len(trips) > MAX_TRIPS:
-        raise ValueError(f"{day_name} {part}: at most {MAX_TRIPS} buses.")
+        raise ValueError(say("{day} {part}: at most {count} buses.", day=day_name, part=part, count=MAX_TRIPS))
     clean = []
     for trip in trips:
         time = str((trip or {}).get("time") or "").strip()
         bus_id = str((trip or {}).get("bus_id") or "").strip()
         if not TIME_24H_RE.match(time):
-            raise ValueError(f"{day_name} {part}: enter a time for every bus.")
+            raise ValueError(say("{day} {part}: enter a time for every bus.", day=day_name, part=part))
         if bus_id and tracking.get_bus(bus_id) is None:
-            raise ValueError(f"{day_name} {part}: bus {bus_id} doesn't exist.")
+            raise ValueError(say("{day} {part}: bus {bus} doesn't exist.", day=day_name, part=part, bus=bus_id))
         clean.append({"bus_id": bus_id, "time": time})
     return sorted(clean, key=lambda t: t["time"])

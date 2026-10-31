@@ -6,9 +6,11 @@
  * timetable day by day in the backend (Schedules tab); data comes from GET /api/schedules.
  *
  * Use: BusSchedule.open({ routeId: "KU-R01", audience: "student" })
+ * Words: content/words/bus_schedule.py (the ST look-up below).
  */
+/** The "Bus schedule" pop-up: open({ routeId, audience }) and close(). */
 const BusSchedule = (() => {
-    const text = window.SCHEDULE_TEXT || {};
+    const ST = words("bus_schedule");
     const el = {
         overlay: document.getElementById("sched-overlay"),
         close: document.getElementById("sched-close"),
@@ -26,9 +28,10 @@ const BusSchedule = (() => {
     /** "13:30" -> ["01:30", "PM"] */
     function clock(hhmm) {
         const [h, m] = hhmm.split(":").map(Number);
-        return [`${String(h % 12 || 12).padStart(2, "0")}:${String(m).padStart(2, "0")}`, h < 12 ? "AM" : "PM"];
+        return [`${String(h % 12 || 12).padStart(2, "0")}:${String(m).padStart(2, "0")}`, h < 12 ? ST("AM") : ST("PM")];
     }
 
+    /** Creates an element with a class and plain text (never HTML). */
     function make(tag, className, content) {
         const node = document.createElement(tag);
         if (className) node.className = className;
@@ -45,13 +48,13 @@ const BusSchedule = (() => {
         });
         const route = routes.find(r => r.route_id === el.route.value);
         el.swatch.style.background = route?.color_hex || "#cbd5e1";
-        el.timeLabel.textContent = part === "morning" ? text.morningTime : text.afternoonTime;
+        el.timeLabel.textContent = part === "morning" ? ST("Reaches campus") : ST("Leaves campus");
         const trips = route ? route[part] : [];
         el.count.textContent = trips.length ? String(trips.length) : "";
 
         if (!trips.length) {
             const empty = make("li", "sched-empty");
-            empty.append(make("span", "sched-empty-icon", "—"), make("span", "", text.noBus));
+            empty.append(make("span", "sched-empty-icon", "—"), make("span", "", ST("No bus today")));
             el.list.replaceChildren(empty);
             return;
         }
@@ -80,7 +83,7 @@ const BusSchedule = (() => {
             routes = data.routes || [];
             el.dayName.textContent = data.day_name || "";
         } catch (e) {
-            el.list.replaceChildren(make("li", "sched-empty", "Could not load. Check your internet."));
+            el.list.replaceChildren(make("li", "sched-empty", ST("Could not load. Check your internet.")));
             return;
         }
         el.route.replaceChildren(...routes.map(r => {
@@ -92,6 +95,7 @@ const BusSchedule = (() => {
         render();
     }
 
+    /** Hides the pop-up. */
     function close() { el.overlay.hidden = true; }
 
     el.close.addEventListener("click", close);

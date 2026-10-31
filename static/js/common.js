@@ -23,3 +23,17 @@
         return originalFetch(input, init);
     };
 })();
+
+/*
+ * Words from the content/words/ folder. The page puts them in window.WORDS; a script
+ * gets a look-up function for its page and asks for the ORIGINAL text:
+ *     const RT = words("rider_map");
+ *     RT("Home saved")                          -> the text set in content/words/rider_map.py
+ *     RT("{minutes} min", { minutes: 5 })       -> blanks in {curly brackets} are filled in
+ */
+window.words = (page) => (original, values) => {
+    const table = (window.WORDS || {})[page] || {};
+    const text = Object.prototype.hasOwnProperty.call(table, original) ? table[original] : original;
+    if (!values) return text;
+    return text.replace(/\{(\w+)\}/g, (blank, name) => (name in values ? String(values[name]) : blank));
+};

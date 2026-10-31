@@ -24,6 +24,7 @@ from models.bus import BUS_AUDIENCES, Bus
 from models.records import BusRecord, RouteRecord
 from models.route import FINAL_STOP_NAME, BusRoute, BusStop
 from services import geo, store
+from services.words import say
 
 HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 TIME_RE = re.compile(r"^(0?[1-9]|1[0-2]):[0-5]\d\s?(AM|PM)$", re.IGNORECASE)
@@ -120,7 +121,8 @@ class TrackingService:
                 return False
             in_use = [b.bus_number for b in self._buses.values() if b.assigned_route_id == route_id]
             if in_use:
-                raise ValueError(f"{', '.join(in_use)} use this route. Move them to another route in Buses first.")
+                raise ValueError(say("{buses} use this route. Move them to another route in Buses first.",
+                                     buses=", ".join(in_use)))
             del self._routes[route_id]
             store.delete(RouteRecord, route_id)
             self._bump()
@@ -137,32 +139,32 @@ class TrackingService:
         clean: dict = {}
         name = str(data.get("route_name") or "").strip()
         if creating and not name:
-            raise ValueError("Route name is required.")
+            raise ValueError(say("Route name is required."))
         if name:
             clean["route_name"] = name[:80]
         if data.get("route_code"):
             clean["route_code"] = str(data["route_code"]).strip()[:30]
         if data.get("color_hex"):
-            clean["color_hex"] = _clean_color(data["color_hex"], "Route colour must look like #2563EB.")
+            clean["color_hex"] = _clean_color(data["color_hex"], say("Route colour must look like #2563EB."))
 
         if creating or "points" in data:
             raw_points = data.get("points") or []
             if not isinstance(raw_points, list):
-                raise ValueError("Route points must be a list.")
+                raise ValueError(say("Route points must be a list."))
             points = []
             for i, point in enumerate(raw_points, start=1):
                 if not isinstance(point, dict):
-                    raise ValueError(f"Point {i} is not valid.")
+                    raise ValueError(say("Point {number} is not valid.", number=i))
                 point_name = str(point.get("name") or "").strip()
                 if point_name.lower() == FINAL_STOP_NAME.lower():
                     continue                      # Hadi Chattar is always added at the end anyway
-                lat, lng = _clean_position(point.get("lat"), point.get("lng"), f"Point {i}")
+                lat, lng = _clean_position(point.get("lat"), point.get("lng"), say("Point {number}", number=i))
                 time_txt = str(point.get("time") or "").strip().upper()
                 if time_txt and not TIME_RE.match(time_txt):
-                    raise ValueError(f"Time for point {i} must look like 08:35 AM.")
+                    raise ValueError(say("Time for point {number} must look like 08:35 AM.", number=i))
                 points.append({"name": point_name[:60], "lat": lat, "lng": lng, "time": time_txt})
             if not points:
-                raise ValueError("Click the map to draw the route.")
+                raise ValueError(say("Click the map to draw the route."))
             clean["points"] = points
             clean["path"] = _clean_path(data.get("path"))
         return clean
@@ -237,7 +239,8 @@ class TrackingService:
             clean = self._clean_bus_fields(data, creating=False)
             route_changed = clean.get("assigned_route_id", bus.assigned_route_id) != bus.assigned_route_id
             if route_changed and bus.is_active:
-                raise ValueError(f"{bus.bus_number} is on a live trip. Stop the trip before changing its route.")
+                raise ValueError(say("{bus} is on a live trip. Stop the trip before changing its route.",
+                                     bus=bus.bus_number))
             for key, value in clean.items():
                 setattr(bus, key, value)
             if route_changed:
@@ -253,7 +256,7 @@ class TrackingService:
             if bus is None:
                 return False
             if bus.is_active:
-                raise ValueError(f"{bus.bus_number} is on a live trip. Stop the trip before deleting it.")
+                raise ValueError(say("{bus} is on a live trip. Stop the trip before deleting it.", bus=bus.bus_number))
             del self._buses[bus_id]
             self._trails.pop(bus_id, None)
             store.delete(BusRecord, bus_id)
@@ -278,32 +281,32 @@ class TrackingService:
             if data.get(key) is not None:
                 clean[key] = str(data[key]).strip()[:limit]
         if (creating or "bus_number" in clean) and not clean.get("bus_number"):
-            raise ValueError("Bus number is required (e.g. KU Bus #05).")
+            raise ValueError(say("Bus number is required (e.g. KU Bus #05)."))
 
         if data.get("assigned_route_id"):
             route_id = str(data["assigned_route_id"]).strip()
             if route_id not in self._routes:
-                raise ValueError(f"Route {route_id} doesn't exist.")
+                raise ValueError(say("Route {id} doesn't exist.", id=route_id))
             clean["assigned_route_id"] = route_id
         elif creating:
-            raise ValueError("Please choose a route for the bus.")
+            raise ValueError(say("Please choose a route for the bus."))
 
         if data.get("color_hex"):
-            clean["color_hex"] = _clean_color(data["color_hex"], "Colour must look like #E11D48.")
+            clean["color_hex"] = _clean_color(data["color_hex"], say("Colour must look like #E11D48."))
 
         if data.get("audience"):
             audience = str(data["audience"]).strip().lower()
             if audience not in BUS_AUDIENCES:
-                raise ValueError(f"A bus must be for one of: {', '.join(BUS_AUDIENCES)}.")
+                raise ValueError(say("A bus must be for one of: {types}.", types=", ".join(BUS_AUDIENCES)))
             clean["audience"] = audience
 
         if data.get("capacity") not in (None, ""):
             try:
                 capacity = int(data["capacity"])
             except (TypeError, ValueError):
-                raise ValueError("Capacity must be a whole number.") from None
+                raise ValueError(say("Capacity must be a whole number.")) from None
             if not 1 <= capacity <= rules.MAX_BUS_SEATS:
-                raise ValueError(f"Capacity must be between 1 and {rules.MAX_BUS_SEATS}.")
+                raise ValueError(say("Capacity must be between 1 and {max}.", max=rules.MAX_BUS_SEATS))
             clean["capacity"] = capacity
         return clean
 
@@ -406,6 +409,7 @@ class TrackingService:
     # Trail: the red line a bus leaves behind on its current trip
     # =====================================================================
     def _add_trail_point(self, bus_id: str, lat: float, lng: float) -> None:
+        """Add a GPS point to the red trail behind a bus (skips tiny GPS wobbles, keeps the newest points)."""
         trail = self._trails.setdefault(bus_id, [])
         if trail and geo.distance_km(trail[-1][0], trail[-1][1], lat, lng) < TRAIL_MIN_STEP_KM:
             return
@@ -511,6 +515,7 @@ def _first_unused(palette: list[str], used: set[str]) -> str:
 
 
 def _clean_color(value, message: str) -> str:
+    """A colour like "#2563EB", or ValueError(message) if it isn't one."""
     color = str(value).strip()
     if not HEX_COLOR_RE.match(color):
         raise ValueError(message)
@@ -522,9 +527,9 @@ def _clean_position(lat, lng, label: str) -> tuple[float, float]:
     try:
         lat, lng = float(lat), float(lng)
     except (TypeError, ValueError):
-        raise ValueError(f"{label} needs a map position.") from None
+        raise ValueError(say("{place} needs a map position.", place=label)) from None
     if not geo.in_bangladesh(lat, lng):
-        raise ValueError(f"{label} is outside Bangladesh.")
+        raise ValueError(say("{place} is outside Bangladesh.", place=label))
     return lat, lng
 
 
@@ -533,11 +538,11 @@ def _clean_path(path) -> list[dict] | None:
     if not path:
         return None
     if not isinstance(path, list) or not 2 <= len(path) <= 20000:
-        raise ValueError("The route line is not valid.")
+        raise ValueError(say("The route line is not valid."))
     clean = []
     for point in path:
         if not isinstance(point, (list, tuple)) or len(point) != 2:
-            raise ValueError("The route line is not valid.")
-        lat, lng = _clean_position(point[0], point[1], "The route line")
+            raise ValueError(say("The route line is not valid."))
+        lat, lng = _clean_position(point[0], point[1], say("The route line"))
         clean.append({"lat": round(lat, 6), "lng": round(lng, 6)})
     return clean

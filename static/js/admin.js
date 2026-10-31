@@ -1,10 +1,14 @@
-/* Backend admin panel (/backend): drivers, routes (map editor), buses. */
+/* Backend admin panel (/backend): drivers, routes (map editor), buses, schedules. */
+
+// Words of this page: content/words/backend.py (AT(original) gives the text shown)
+const AT = words("backend");
 
 // Data the page was rendered with (routes, buses, final destination)
 const ADMIN_DATA = JSON.parse(document.getElementById("admin-data").textContent);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------- Shared helpers ----------
+/** Shows one tab (Drivers, Routes, Buses, Schedules, Users) and remembers it for the next reload. */
 function switchTab(tabName) {
     const tab = document.getElementById(`tab-${tabName}`);
     const nav = document.getElementById(`nav-${tabName}`);
@@ -20,7 +24,9 @@ try {
     if (savedTab) switchTab(savedTab);
 } catch (e) {}
 
+/** Opens a pop-up form by its id. */
 function openModal(id) { document.getElementById(id).classList.add("active"); }
+/** Closes a pop-up form (and any open place suggestions). */
 function closeModal(id) {
     document.getElementById(id).classList.remove("active");
     if (typeof closeSuggest === "function") closeSuggest();
@@ -29,6 +35,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") document.querySelectorAll(".modal-overlay.active").forEach(m => m.classList.remove("active"));
 });
 
+/** Shows a red message inside a form (empty message hides it). */
 function showFormError(id, message) {
     const box = document.getElementById(id);
     box.textContent = message || "";
@@ -36,6 +43,7 @@ function showFormError(id, message) {
 }
 
 let toastTimer = null;
+/** Short message at the bottom of the screen (red when isError). */
 function toast(message, isError = false) {
     const t = document.getElementById("admin-toast");
     t.textContent = message;
@@ -45,6 +53,7 @@ function toast(message, isError = false) {
     toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
 }
 
+/** Sends JSON to the server and returns its reply; a server error becomes a readable message. */
 async function api(method, url, body) {
     const resp = await fetch(url, {
         method,
@@ -53,7 +62,7 @@ async function api(method, url, body) {
     });
     if (resp.status === 401) {
         window.location.href = "/backend/login";
-        throw new Error("Signed out");
+        throw new Error("signed out");
     }
     const data = await resp.json().catch(() => ({}));
     return { ok: resp.ok && data.success !== false, data };
@@ -61,18 +70,20 @@ async function api(method, url, body) {
 
 // ---------- Drivers ----------
 const driverBusSelect = document.getElementById("driver-bus");
+/** Under the bus picker in the driver form: which route that bus drives today. */
 function updateDriverRouteNote() {
     const opt = driverBusSelect.selectedOptions[0];
     const route = opt ? ADMIN_DATA.routes.find(r => r.route_id === opt.dataset.routeId) : null;
-    document.getElementById("driver-route-note").textContent = route ? `Route today: ${route.route_name}` : "";
+    document.getElementById("driver-route-note").textContent = route ? AT("Route today: {route}", { route: route.route_name }) : "";
 }
 driverBusSelect.addEventListener("change", updateDriverRouteNote);
 
+/** Opens the Add / Edit driver form (filled in when a driver is given). */
 function openDriverModal(driver) {
     showFormError("driver-form-error", "");
     const editing = !!driver;
-    document.getElementById("driver-modal-title").textContent = editing ? `Edit ${driver.full_name}` : "Add Driver";
-    document.getElementById("driver-submit-btn").textContent = editing ? "Save" : "Add Driver";
+    document.getElementById("driver-modal-title").textContent = editing ? AT("Edit {name}", { name: driver.full_name }) : AT("Add driver");
+    document.getElementById("driver-submit-btn").textContent = editing ? AT("Save") : AT("Add driver");
     document.getElementById("driver-id").value = editing ? driver.driver_id : "";
     document.getElementById("driver-name").value = editing ? driver.full_name : "";
     document.getElementById("driver-phone").value = editing ? (driver.phone || "") : "";
@@ -80,8 +91,8 @@ function openDriverModal(driver) {
     const pinInput = document.getElementById("driver-pin");
     pinInput.value = "";
     pinInput.required = !editing;
-    pinInput.placeholder = editing ? "New PIN (optional)" : pinInput.dataset.placeholder;
-    document.getElementById("driver-pin-note").textContent = editing ? "Leave empty to keep the current PIN." : "";
+    pinInput.placeholder = editing ? AT("New PIN (optional)") : pinInput.dataset.placeholder;
+    document.getElementById("driver-pin-note").textContent = editing ? AT("Leave empty to keep the current PIN.") : "";
     if (editing && driver.assigned_bus_id) driverBusSelect.value = driver.assigned_bus_id;
     updateDriverRouteNote();
     openModal("modal-driver");
@@ -99,19 +110,21 @@ document.getElementById("form-driver").addEventListener("submit", async (e) => {
     };
     const { ok, data } = await api(id ? "PUT" : "POST", id ? `/api/admin/drivers/${encodeURIComponent(id)}` : "/api/admin/drivers", payload);
     if (ok) location.reload();
-    else showFormError("driver-form-error", data.message || "Could not save the driver.");
+    else showFormError("driver-form-error", data.message || AT("Could not save the driver."));
 });
 
+/** Frees a driver account that is stuck on another phone. */
 async function unlockDriver(driverId, name) {
-    if (!confirm(`Sign ${name} out of their device so they can log in again?`)) return;
+    if (!confirm(AT("Sign {name} out of their device so they can log in again?", { name }))) return;
     const { ok, data } = await api("POST", `/api/admin/drivers/${encodeURIComponent(driverId)}/unlock`);
-    if (ok) location.reload(); else toast(data.message || "Could not unlock.", true);
+    if (ok) location.reload(); else toast(data.message || AT("Could not unlock."), true);
 }
 
+/** Deletes a driver after asking to confirm. */
 async function deleteDriver(driverId, name) {
-    if (!confirm(`Delete driver ${name}?`)) return;
+    if (!confirm(AT("Delete driver {name}?", { name }))) return;
     const { ok, data } = await api("DELETE", `/api/admin/drivers/${encodeURIComponent(driverId)}`);
-    if (ok) location.reload(); else toast(data.message || "Could not delete.", true);
+    if (ok) location.reload(); else toast(data.message || AT("Could not delete."), true);
 }
 
 // ---------- Routes (map editor) ----------
@@ -124,9 +137,12 @@ let roadIsFresh = false;      // true when roadPath was just worked out from the
 let roadRequest = 0;
 let roadTimer = null;
 
+/** The colour chosen in the route form. */
 function routeColor() { return document.getElementById("route-color").value; }
+/** Position of the final stop that every route ends at. */
 function destLatLng() { return [ADMIN_DATA.destination.latitude, ADMIN_DATA.destination.longitude]; }
 
+/** Creates the route editor's map the first time it is needed. */
 function ensureRouteMap() {
     if (routeMap) return;
     routeMap = L.map("route-map", { zoomControl: true, attributionControl: false, doubleClickZoom: false })
@@ -139,6 +155,7 @@ function ensureRouteMap() {
     });
 }
 
+/** The admin moved or added a point: fetch a new road line shortly after. */
 function routeChanged() {
     drawRoute();
     clearTimeout(roadTimer);
@@ -146,11 +163,12 @@ function routeChanged() {
 }
 
 // Ask the road map for the driving route through the points and on to Hadi Chattar
+/** Asks the server (OSRM road router) for the road line through the points. */
 async function fetchRoadPath() {
     const id = ++roadRequest;
     if (!editPoints.length) { roadPath = null; drawRoute(); return; }
     const coords = editPoints.map(p => [p.lat, p.lng]).concat([destLatLng()]);
-    setRouteInfo("Finding the roads…");
+    setRouteInfo(AT("Finding the roads…"));
     try {
         // Our server asks the road map (no browser cross-site issues)
         const { ok, data } = await api("POST", "/api/admin/road-path", { points: coords });
@@ -166,6 +184,7 @@ async function fetchRoadPath() {
     }
 }
 
+/** Length of a line of points in km. */
 function lengthKm(pts) {
     let km = 0;
     for (let i = 1; i < pts.length; i++) {
@@ -176,12 +195,14 @@ function lengthKm(pts) {
     return km;
 }
 
+/** Status line under the route editor map (length, or a warning). */
 function setRouteInfo(text, warn = false) {
     const el = document.getElementById("route-info");
     el.textContent = text;
     el.classList.toggle("warn", warn);
 }
 
+/** Draws the route's points and its road line (or straight lines if the road router failed). */
 function drawRoute(roadFailed = false) {
     if (!routeMap) return;
     routeLayer.clearLayers();
@@ -197,7 +218,7 @@ function drawRoute(roadFailed = false) {
             draggable: true,
             icon: L.divIcon({ className: "route-stop-marker", html: `<div style="background:${esc(color)}">${i + 1}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] })
         }).addTo(routeLayer);
-        m.bindTooltip(i === 0 ? "Start · drag to move, double-click to remove" : "Drag to move, double-click to remove");
+        m.bindTooltip(i === 0 ? AT("Start · drag to move, double-click to remove") : AT("Drag to move, double-click to remove"));
         m.on("dragend", () => {
             const ll = m.getLatLng();
             p.lat = +ll.lat.toFixed(6);
@@ -215,15 +236,17 @@ function drawRoute(roadFailed = false) {
         icon: L.divIcon({ className: "route-dest-marker", html: `<div>🏁 ${esc(ADMIN_DATA.destination.stop_name)}</div>`, iconSize: [110, 22], iconAnchor: [12, 22] })
     }).addTo(routeLayer);
 
-    if (!editPoints.length) setRouteInfo("Click the map where the route starts.");
-    else if (roadFailed) setRouteInfo("Couldn't reach the road map, so the line is drawn straight. It will still save.", true);
-    else if (roadPath) setRouteInfo(roadIsFresh ? `${lengthKm(roadPath).toFixed(1)} km along the roads` : `${lengthKm(roadPath).toFixed(1)} km`);
+    if (!editPoints.length) setRouteInfo(AT("Click the map where the route starts."));
+    else if (roadFailed) setRouteInfo(AT("Couldn't reach the road map, so the line is drawn straight. It will still save."), true);
+    else if (roadPath) setRouteInfo(roadIsFresh
+        ? AT("{km} km along the roads", { km: lengthKm(roadPath).toFixed(1) })
+        : AT("{km} km", { km: lengthKm(roadPath).toFixed(1) }));
 }
 
 document.getElementById("route-color").addEventListener("input", () => drawRoute());
 document.getElementById("route-undo").addEventListener("click", () => { editPoints.pop(); routeChanged(); });
 document.getElementById("route-clear").addEventListener("click", () => {
-    if (editPoints.length && !confirm("Remove all points of this route?")) return;
+    if (editPoints.length && !confirm(AT("Remove all points of this route?"))) return;
     editPoints = [];
     routeChanged();
 });
@@ -231,6 +254,7 @@ document.getElementById("route-name").addEventListener("input", () => showFormEr
 
 // ---------- Place-name suggestions ----------
 // Every stop the app knows (all routes), except the final destination
+/** Every named stop of every route (for the place suggestions). */
 function knownPlaces() {
     const seen = new Map();
     const dest = ADMIN_DATA.destination.stop_name.toLowerCase();
@@ -241,6 +265,7 @@ function knownPlaces() {
     return Array.from(seen.values());
 }
 
+/** Known places matching the typed text, best first. */
 function matchPlaces(query) {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -262,12 +287,14 @@ suggestBox.setAttribute("role", "listbox");
 document.body.appendChild(suggestBox);
 let suggestFor = null;      // { input, onPick, items, active }
 
+/** Hides the place suggestion list. */
 function closeSuggest() {
     suggestBox.classList.remove("open");
     suggestBox.innerHTML = "";
     suggestFor = null;
 }
 
+/** Shows place suggestions under a text box. */
 function showSuggest(input, onPick) {
     const items = matchPlaces(input.value);
     if (!items.length) { closeSuggest(); return; }
@@ -291,6 +318,7 @@ function showSuggest(input, onPick) {
     });
 }
 
+/** Uses the chosen suggestion. */
 function pickSuggest(i) {
     if (!suggestFor) return;
     const { onPick, items } = suggestFor;
@@ -299,6 +327,7 @@ function pickSuggest(i) {
     if (place) onPick(place);
 }
 
+/** Adds type-ahead place suggestions to a text box. */
 function attachPlaceSuggest(input, onPick) {
     input.addEventListener("input", () => showSuggest(input, onPick));
     input.addEventListener("focus", () => { if (input.value.trim()) showSuggest(input, onPick); });
@@ -334,11 +363,12 @@ attachPlaceSuggest(document.getElementById("route-name"), (place) => {
     }
 });
 
+/** Opens the Add / Edit route form with its map editor. */
 function openRouteModal(routeId) {
     showFormError("route-form-error", "");
     const route = routeId ? ADMIN_DATA.routes.find(r => r.route_id === routeId) : null;
-    document.getElementById("route-modal-title").textContent = route ? `Edit ${route.route_name}` : "Add Route";
-    document.getElementById("route-submit-btn").textContent = route ? "Save" : "Add Route";
+    document.getElementById("route-modal-title").textContent = route ? AT("Edit {name}", { name: route.route_name }) : AT("Add route");
+    document.getElementById("route-submit-btn").textContent = route ? AT("Save") : AT("Add route");
     document.getElementById("route-id").value = route ? route.route_id : "";
     document.getElementById("route-name").value = route ? route.route_name : "";
     document.getElementById("route-color").value = route ? route.color_hex.toLowerCase() : "#2563eb";
@@ -362,8 +392,8 @@ document.getElementById("form-route").addEventListener("submit", async (e) => {
     e.preventDefault();
     const id = document.getElementById("route-id").value;
     const name = document.getElementById("route-name").value.trim();
-    if (!name) { showFormError("route-form-error", "Give the route a name."); return; }
-    if (!editPoints.length) { showFormError("route-form-error", "Click the map to draw the route."); return; }
+    if (!name) { showFormError("route-form-error", AT("Give the route a name.")); return; }
+    if (!editPoints.length) { showFormError("route-form-error", AT("Click the map to draw the route.")); return; }
     const payload = {
         route_name: name,
         color_hex: routeColor(),
@@ -372,29 +402,32 @@ document.getElementById("form-route").addEventListener("submit", async (e) => {
     };
     const { ok, data } = await api(id ? "PUT" : "POST", id ? `/api/admin/routes/${encodeURIComponent(id)}` : "/api/admin/routes", payload);
     if (ok) location.reload();
-    else showFormError("route-form-error", data.message || "Could not save the route.");
+    else showFormError("route-form-error", data.message || AT("Could not save the route."));
 });
 
+/** Deletes a route after asking to confirm. */
 async function deleteRoute(routeId, name) {
-    if (!confirm(`Remove route "${name}"?`)) return;
+    if (!confirm(AT("Remove the route {name}?", { name }))) return;
     const { ok, data } = await api("DELETE", `/api/admin/routes/${encodeURIComponent(routeId)}`);
-    if (ok) location.reload(); else toast(data.message || "Could not remove the route.", true);
+    if (ok) location.reload(); else toast(data.message || AT("Could not remove the route."), true);
 }
 
 // ---------- Buses ----------
+/** Bus table: sends a bus on another route today (its driver sees "Changed today"). */
 async function changeBusRoute(select) {
     const busId = select.dataset.busId;
     const previous = select.dataset.current;
     const { ok, data } = await api("PUT", `/api/admin/buses/${encodeURIComponent(busId)}`, { assigned_route_id: select.value });
     if (ok) {
         select.dataset.current = select.value;
-        toast(`${data.bus.bus_number} → ${select.selectedOptions[0].textContent}. Its driver has been notified.`);
+        toast(AT("{bus} → {route}. Its driver has been notified.", { bus: data.bus.bus_number, route: select.selectedOptions[0].textContent }));
     } else {
         select.value = previous;
-        toast(data.message || "Could not change the route.", true);
+        toast(data.message || AT("Could not change the route."), true);
     }
 }
 
+/** Bus table: changes who a bus is for (students, teachers, ...). */
 async function changeBusAudience(select) {
     const previous = select.dataset.current;
     const { ok, data } = await api("PUT", `/api/admin/buses/${encodeURIComponent(select.dataset.busId)}`, { audience: select.value });
@@ -402,20 +435,22 @@ async function changeBusAudience(select) {
         select.dataset.current = select.value;
         const rider = ADMIN_DATA.rider_types[select.value];
         select.style.setProperty("--aud-color", rider.color);
-        toast(`${data.bus.bus_number} is now a bus for ${rider.plural.toLowerCase()}.`);
+        toast(AT("{bus} is now a bus for {group}.", { bus: data.bus.bus_number, group: rider.plural.toLowerCase() }));
     } else {
         select.value = previous;
-        toast(data.message || "Could not change it.", true);
+        toast(data.message || AT("Could not change it."), true);
     }
 }
 
+/** Starts or stops a test drive of a bus along its route. */
 async function simulateBus(busId, isLive) {
     const { ok, data } = await api("POST", `/api/admin/buses/${encodeURIComponent(busId)}/simulate`, { action: isLive ? "stop" : "start" });
-    if (ok) location.reload(); else toast(data.message || "Could not start the test drive.", true);
+    if (ok) location.reload(); else toast(data.message || AT("Could not start the test drive."), true);
 }
 
 const busColorInput = document.getElementById("bus-color");
 const busSwatches = document.querySelectorAll("#bus-color-swatches .color-swatch-btn");
+/** Picks a colour in the bus form. */
 function selectBusColor(color) {
     busColorInput.value = color.toLowerCase();
     busSwatches.forEach(b => b.classList.toggle("selected", b.dataset.color.toLowerCase() === color.toLowerCase()));
@@ -423,11 +458,12 @@ function selectBusColor(color) {
 busSwatches.forEach(b => b.addEventListener("click", () => selectBusColor(b.dataset.color)));
 busColorInput.addEventListener("input", () => selectBusColor(busColorInput.value));
 
+/** Opens the Add / Edit bus form (filled in when a bus is given). */
 function openBusModal(bus) {
     showFormError("bus-form-error", "");
     const editing = !!bus;
-    document.getElementById("bus-modal-title").textContent = editing ? `Edit ${bus.bus_number}` : "Add Bus";
-    document.getElementById("bus-submit-btn").textContent = editing ? "Save" : "Add Bus";
+    document.getElementById("bus-modal-title").textContent = editing ? AT("Edit {name}", { name: bus.bus_number }) : AT("Add bus");
+    document.getElementById("bus-submit-btn").textContent = editing ? AT("Save") : AT("Add bus");
     document.getElementById("bus-id").value = editing ? bus.bus_id : "";
     document.getElementById("bus-number").value = editing ? bus.bus_number : "";
     document.getElementById("bus-name").value = editing ? bus.bus_name : "";
@@ -458,13 +494,14 @@ document.getElementById("form-bus").addEventListener("submit", async (e) => {
     };
     const { ok, data } = await api(id ? "PUT" : "POST", id ? `/api/admin/buses/${encodeURIComponent(id)}` : "/api/admin/buses", payload);
     if (ok) location.reload();
-    else showFormError("bus-form-error", data.message || "Could not save the bus.");
+    else showFormError("bus-form-error", data.message || AT("Could not save the bus."));
 });
 
+/** Deletes a bus after asking to confirm. */
 async function deleteBus(busId, busNumber) {
-    if (!confirm(`Delete ${busNumber}? Nobody will see it on the map any more.`)) return;
+    if (!confirm(AT("Delete {bus}? Nobody will see it on the map any more.", { bus: busNumber }))) return;
     const { ok, data } = await api("DELETE", `/api/admin/buses/${encodeURIComponent(busId)}`);
-    if (ok) location.reload(); else toast(data.message || "Could not delete the bus.", true);
+    if (ok) location.reload(); else toast(data.message || AT("Could not delete the bus."), true);
 }
 
 // Show saved UTC times (Users tab) in the admin's local time.
@@ -487,7 +524,7 @@ function busOptions(routeId, selected) {
         : "";
     const onRoute = ADMIN_DATA.buses.filter(b => b.assigned_route_id === routeId);
     const others = ADMIN_DATA.buses.filter(b => b.assigned_route_id !== routeId);
-    return `<option value="">— Choose bus —</option>${group("On this route", onRoute)}${group("Other buses", others)}`;
+    return `<option value="">${esc(AT("— Choose bus —"))}</option>${group(AT("On this route"), onRoute)}${group(AT("Other buses"), others)}`;
 }
 
 /** Reads the rows on screen back into scheduleWeek for the day being edited. */
@@ -500,13 +537,14 @@ function storeScheduleDay() {
     });
 }
 
+/** Adds one trip row (bus + time) to the morning or afternoon list in the schedule form. */
 function addTripRow(part, trip = { bus_id: "", time: "" }) {
     const row = document.createElement("div");
     row.className = "trip-row";
     row.innerHTML = `
-        <select class="custom-select trip-bus" aria-label="Bus">${busOptions(scheduleRouteId, trip.bus_id)}</select>
-        <input type="time" class="custom-input trip-time" aria-label="Time">
-        <button type="button" class="trip-remove" aria-label="Remove">✕</button>`;
+        <select class="custom-select trip-bus" aria-label="${esc(AT("Bus"))}">${busOptions(scheduleRouteId, trip.bus_id)}</select>
+        <input type="time" class="custom-input trip-time" aria-label="${esc(AT("Time"))}">
+        <button type="button" class="trip-remove" aria-label="${esc(AT("Remove"))}">✕</button>`;
     row.querySelector(".trip-time").value = trip.time;
     row.querySelector(".trip-remove").addEventListener("click", () => { row.remove(); storeScheduleDay(); updateDayCounts(); });
     row.querySelectorAll("select, input").forEach(field => field.addEventListener("change", () => { storeScheduleDay(); updateDayCounts(); }));
@@ -518,11 +556,12 @@ function updateDayCounts() {
     document.querySelectorAll("#schedule-day-tabs .day-tab").forEach(tab => {
         const d = scheduleWeek[tab.dataset.day];
         const n = d.morning.length + d.afternoon.length;
-        tab.querySelector(".day-tab-count").textContent = n ? `${n} bus${n > 1 ? "es" : ""}` : "Off";
+        tab.querySelector(".day-tab-count").textContent = n === 1 ? AT("1 bus") : n ? AT("{count} buses", { count: n }) : AT("Off");
         tab.classList.toggle("is-off", !n);
     });
 }
 
+/** Shows one day of the week in the schedule form. */
 function showScheduleDay(day) {
     storeScheduleDay();
     scheduleDay = day;
@@ -534,6 +573,7 @@ function showScheduleDay(day) {
     updateDayCounts();
 }
 
+/** Opens a route's weekly schedule form. */
 function openScheduleModal(routeId) {
     const s = ADMIN_DATA.schedules.find(x => x.route_id === routeId);
     if (!s) return;
@@ -555,7 +595,7 @@ document.getElementById("schedule-copy-all")?.addEventListener("click", () => {
     const source = JSON.stringify(scheduleWeek[scheduleDay]);
     Object.keys(scheduleWeek).forEach(day => { scheduleWeek[day] = JSON.parse(source); });
     updateDayCounts();
-    toast("Copied to all days. Press Save to keep it.");
+    toast(AT("Copied to all days. Press Save to keep it."));
 });
 
 document.getElementById("form-schedule")?.addEventListener("submit", async (e) => {
@@ -563,5 +603,5 @@ document.getElementById("form-schedule")?.addEventListener("submit", async (e) =
     storeScheduleDay();
     const { ok, data } = await api("PUT", `/api/admin/schedules/${encodeURIComponent(scheduleRouteId)}`, { days: scheduleWeek });
     if (ok) location.reload();
-    else showFormError("schedule-form-error", data.message || "Could not save the schedule.");
+    else showFormError("schedule-form-error", data.message || AT("Could not save the schedule."));
 });

@@ -9,6 +9,7 @@ because browsers block it (CORS). Needs internet access on the server.
 import requests
 
 from config import Config
+from services.words import say
 
 USER_AGENT = "BusPlus-KU/1.0 (route editor)"
 TIMEOUT_S = 15
@@ -36,10 +37,10 @@ def road_path(points: list[tuple[float, float]]) -> tuple[list[list[float]], flo
         response.raise_for_status()
         result = response.json()
     except (requests.RequestException, ValueError) as err:
-        raise RoadRouterError(f"Road map not reachable ({err.__class__.__name__}).") from err
+        raise RoadRouterError(say("Road map not reachable ({reason}).", reason=err.__class__.__name__)) from err
 
     if result.get("code") != "Ok" or not result.get("routes"):
-        raise RoadRouterError("No road route found between these points.")
+        raise RoadRouterError(say("No road route found between these points."))
     best = result["routes"][0]
     path = [[round(lat, 6), round(lng, 6)] for lng, lat in best["geometry"]["coordinates"]]
     return path, round(best.get("distance", 0) / 1000, 2)

@@ -16,11 +16,15 @@ HOW TO ADD A NEW TYPE (example: Passenger)
             "label": "Passenger",          # one person, on buttons and titles
             "plural": "Passengers",        # many people, in the backend
             "id_label": "Phone number",    # what the sign-in page asks for as the ID
-            "icon": "🧳",                  # any emoji
+            "icon": "suitcase",            # a picture from the list below
             "color": "#EA580C",            # button colour
         },
   3. Save and restart the app. Then, in the backend, set some buses to
      "Passengers" so passengers have buses to see.
+
+ICONS you can use for "icon":
+    cap, briefcase, user, users, suitcase, book, id, star, bus, steering
+  (they are simple line drawings in the button's colour; templates/_ui.html draws them)
 
 HOW TO REMOVE A TYPE: delete its block (buses that were for it disappear
 from the maps until you give them another type in the backend).
@@ -34,14 +38,14 @@ RIDER_TYPES = {
         "label": "Student",
         "plural": "Students",
         "id_label": "Student ID",
-        "icon": "🎓",
+        "icon": "cap",
         "color": "#059669",
     },
     "teacher": {
         "label": "Teacher",
         "plural": "Teachers",
         "id_label": "Teacher ID",
-        "icon": "👩‍🏫",
+        "icon": "briefcase",
         "color": "#7C3AED",
     },
 }
@@ -49,6 +53,6 @@ RIDER_TYPES = {
 # The Driver button on the start page.
 DRIVER = {
     "label": "Driver",
-    "icon": "👨‍✈️",
+    "icon": "steering",
     "color": "#0866FF",
 }

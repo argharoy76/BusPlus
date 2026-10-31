@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from models.records import DriverRecord
 from models.user import DriverUser
 from services import store
+from services.words import say
 
 
 class LoginError(Exception):
@@ -154,18 +155,19 @@ class UserService:
         with self._lock:
             driver = self.find_driver(name_or_id)
             if driver is None:
-                raise LoginError("Driver not found. Please pick your name from the list.")
+                raise LoginError(say("Driver not found. Please pick your name from the list."))
             if not driver.check_pin(pin):
-                raise LoginError("Incorrect PIN.")
+                raise LoginError(say("Incorrect PIN."))
             if route_id and bus_route_id and route_id != bus_route_id:
-                raise LoginError("That isn't your route. Please choose the route of your assigned bus.")
+                raise LoginError(say("That isn't your route. Please choose the route of your assigned bus."))
 
             now = datetime.now(UTC)
             if driver.is_logged_in and driver.session_token != session_token:
                 last_seen = driver.last_active_at or _parse_iso(driver.last_login_at)
                 if last_seen and now - last_seen < timedelta(minutes=lock_minutes):
-                    raise LoginError(f"Account '{driver.full_name}' is already logged in on another device. "
-                                     "Log out there first, or ask the admin to unlock it.", status=409)
+                    raise LoginError(say(
+                        "Account '{name}' is already logged in on another device. Log out there first, or ask the admin to unlock it.",  # noqa: E501
+                        name=driver.full_name), status=409)
 
             driver.session_token = session_token
             driver.last_login_at = now.isoformat()
@@ -203,6 +205,7 @@ class UserService:
 
     @staticmethod
     def _release(driver: DriverUser) -> None:
+        """Free the account: forget the phone that held it and save."""
         driver.session_token = None
         driver.last_active_at = None
         store.save(driver.to_record())
@@ -214,6 +217,7 @@ def new_session_token() -> str:
 
 
 def _parse_iso(text: str | None) -> datetime | None:
+    """A saved ISO date text as a datetime (None if empty or unreadable)."""
     try:
         return datetime.fromisoformat(text) if text else None
     except ValueError:

@@ -6,7 +6,11 @@
  *   - Online / Offline switch: start or stop sharing the bus's location
  *
  * Needs google_maps_helper.js (window.googleMapsHelper) loaded first.
+ * Words: content/words/driver_map.py (the DT look-up below).
  */
+
+/** Words of this page from content/words/driver_map.py. */
+const DT = words("driver_map");
 
 /** The driver page: map, GPS sending, menu, duty notification and session handling. */
 class DriverApp {
@@ -63,10 +67,12 @@ class DriverApp {
         try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
     }
 
+    /** Saves a setting on this phone (ignored if storage is blocked). */
     writeSetting(key, value) {
         try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
     }
 
+    /** Starts the page: map, menu, live feed, GPS and the duty card. */
     init() {
         const helper = window.googleMapsHelper;
         // Driver map: nothing but the map and the bus icon (no layer buttons, no corner label)
@@ -106,6 +112,7 @@ class DriverApp {
     // ------------------------------------------------------------------
     // Menu
     // ------------------------------------------------------------------
+    /** Wires up the logo button, menu buttons, online switch and log out. */
     bindMenu() {
         this.el.icon.addEventListener("click", () => this.toggleMenu());
         this.el.backdrop.addEventListener("click", () => this.closeMenu());
@@ -128,11 +135,13 @@ class DriverApp {
         this.el.logout.addEventListener("click", () => this.logout());
     }
 
+    /** Opens or closes the menu under the logo. */
     toggleMenu() {
         if (this.el.menu.classList.contains("open")) this.closeMenu();
         else this.openMenu();
     }
 
+    /** Opens the menu (and marks a new duty as seen). */
     openMenu() {
         this.el.menu.classList.add("open");
         this.el.menu.setAttribute("aria-hidden", "false");
@@ -142,6 +151,7 @@ class DriverApp {
         this.markDutySeen();
     }
 
+    /** Closes the menu. */
     closeMenu() {
         this.el.menu.classList.remove("open");
         this.el.menu.setAttribute("aria-hidden", "true");
@@ -153,6 +163,7 @@ class DriverApp {
     // ------------------------------------------------------------------
     // Your bus / All buses
     // ------------------------------------------------------------------
+    /** Switches between "Your bus" and "All buses" and redraws the map. */
     applyView(view, { fit = false } = {}) {
         this.view = view === "all" ? "all" : "mine";
         this.writeSetting("busplus_driver_view", this.view);
@@ -223,6 +234,7 @@ class DriverApp {
         };
     }
 
+    /** Fetches the bus list once (used while the live feed is down). */
     async refreshBuses() {
         try {
             const resp = await fetch("/api/buses");
@@ -260,6 +272,7 @@ class DriverApp {
     // ------------------------------------------------------------------
     // GPS (turns on by itself)
     // ------------------------------------------------------------------
+    /** Updates the GPS dot on the logo and the GPS line in the menu. */
     setGpsState(state, text) {
         this.el.gpsDot.className = `drv-gps-dot ${state}`;
         this.el.gpsState.className = `drv-gps-state ${state}`;
@@ -267,25 +280,27 @@ class DriverApp {
         this.el.gpsRetry.hidden = state !== "off";
     }
 
+    /** Shows (or hides, with empty text) the red message at the bottom. */
     showBanner(text) {
         this.el.banner.textContent = text;
         this.el.banner.hidden = !text;
     }
 
+    /** Turns the trip on and starts watching the phone's GPS. */
     async startGps() {
         if (!this.online) return;
         if (!window.isSecureContext) {
-            this.setGpsState("off", "GPS needs HTTPS");
-            this.showBanner("GPS can't start: phones only share location with sites opened over HTTPS (or on this computer as localhost).");
+            this.setGpsState("off", DT("GPS needs HTTPS"));
+            this.showBanner(DT("GPS can't start: phones only share location with sites opened over HTTPS (or on this computer as localhost)."));
             return;
         }
         if (!navigator.geolocation) {
-            this.setGpsState("off", "No GPS on this device");
-            this.showBanner("This device or browser can't share its location.");
+            this.setGpsState("off", DT("No GPS on this device"));
+            this.showBanner(DT("This device or browser can't share its location."));
             return;
         }
 
-        this.setGpsState("", "Starting GPS…");
+        this.setGpsState("", DT("Starting GPS…"));
         this.showBanner("");
 
         const started = await this.post("/api/driver/trip/start", {});
@@ -304,7 +319,7 @@ class DriverApp {
     onPosition(pos) {
         if (!this.online) return;
         const { latitude, longitude, speed, heading } = pos.coords;
-        this.setGpsState("on", "GPS on · sharing location");
+        this.setGpsState("on", DT("GPS on · sharing location"));
         this.showBanner("");
 
         const fix = {
@@ -333,6 +348,7 @@ class DriverApp {
         this.sendFix(fix);
     }
 
+    /** Sends one GPS position to the server. */
     sendFix(fix) {
         this.lastSent = { t: Date.now(), lat: fix.latitude, lng: fix.longitude };
         this.sending = true;
@@ -350,10 +366,12 @@ class DriverApp {
         });
     }
 
+    /** Sends the newest waiting GPS position once the last one is done. */
     flushPending() {
         if (this.pendingFix && !this.sending && this.online) this.sendFix(this.pendingFix);
     }
 
+    /** Keeps the map centred on this driver's bus while following. */
     followMyBus() {
         if (this.view === "mine" && this.follow && this.bus.is_active && this.bus.current_latitude) {
             window.googleMapsHelper.leafletMap?.panTo([this.bus.current_latitude, this.bus.current_longitude], { animate: true, duration: 0.8 });
@@ -363,16 +381,17 @@ class DriverApp {
     // ------------------------------------------------------------------
     // Online / Offline
     // ------------------------------------------------------------------
+    /** Shows the Online / Offline switch and title. */
     renderOnline() {
         const on = this.online;
         this.el.onlineSwitch.classList.toggle("on", on);
         this.el.onlineSwitch.setAttribute("aria-checked", on ? "true" : "false");
-        this.el.onlineSwitch.setAttribute("aria-label", on ? "Online. Tap to go offline" : "Offline. Tap to go online");
-        const text = window.APP_CONFIG?.text || {};
-        this.el.onlineTitle.textContent = on ? (text.online || "You are online") : (text.offline || "You are offline");
+        this.el.onlineSwitch.setAttribute("aria-label", on ? DT("Online. Tap to go offline") : DT("Offline. Tap to go online"));
+        this.el.onlineTitle.textContent = on ? DT("You are online") : DT("You are offline");
         this.el.onlineTitle.classList.toggle("off", !on);
     }
 
+    /** The driver flipped the switch: start or stop sharing location. */
     setOnline(on) {
         this.online = !!on;
         this.writeSetting("busplus_driver_online", this.online ? "1" : "0");
@@ -390,27 +409,29 @@ class DriverApp {
         this.pendingFix = null;
         clearTimeout(this.pendingTimer);
         this.showBanner("");
-        this.setGpsState("off-duty", "Not sharing location");
+        this.setGpsState("off-duty", DT("Not sharing location"));
         // Let a location update that's already on its way land first, so it can't switch the bus back on
         for (let i = 0; i < 30 && this.sending; i++) await new Promise(r => setTimeout(r, 100));
         if (!quiet || this.bus.is_active) await this.post("/api/driver/trip/stop", {});
         try { await this.wakeLock?.release(); } catch (e) {}
     }
 
+    /** Explains why GPS stopped (blocked, no signal, unavailable). */
     onGpsError(err) {
         if (err.code === 1) {
-            this.setGpsState("off", "Location blocked");
-            this.showBanner("Location is blocked for BusPlus. Allow location in your browser settings, then tap the bus icon → Turn on.");
+            this.setGpsState("off", DT("Location blocked"));
+            this.showBanner(DT("Location is blocked for this site. Allow location in your browser settings, then open the menu and tap Try again."));
             if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
             this.watchId = null;
         } else if (err.code === 3) {
-            this.setGpsState("", "Waiting for GPS signal…");
+            this.setGpsState("", DT("Waiting for GPS signal…"));
         } else {
-            this.setGpsState("off", "GPS unavailable");
-            this.showBanner("Can't get a GPS position right now. Move to an open area and tap the bus icon → Turn on.");
+            this.setGpsState("off", DT("GPS unavailable"));
+            this.showBanner(DT("Can't get a GPS position right now. Move to an open area, then open the menu and tap Try again."));
         }
     }
 
+    /** Keeps the screen awake while driving (where the browser allows it). */
     async requestWakeLock() {
         // Keeps the screen (and GPS) awake while driving, where the browser supports it
         try {
@@ -424,6 +445,7 @@ class DriverApp {
     // ------------------------------------------------------------------
     // Today's duty (notification)
     // ------------------------------------------------------------------
+    /** Fetches today's duty (bus, route, start time) from the server. */
     async loadDuty() {
         try {
             const resp = await fetch("/api/driver/assignment");
@@ -435,28 +457,31 @@ class DriverApp {
         } catch (e) { /* try again later */ }
     }
 
+    /** Fills the duty card in the menu. */
     renderDuty() {
         const d = this.duty;
         if (!d) return;
         this.el.dutyDate.textContent = d.date_label || "";
 
         // Bus: its name big, then "Bus no. … · Plate …"
-        this.el.dutyBus.textContent = d.bus_number ? (d.bus_name || d.bus_number) : "No bus assigned yet";
+        this.el.dutyBus.textContent = d.bus_number ? (d.bus_name || d.bus_number) : DT("No bus assigned yet");
         const busFacts = [];
-        if (d.bus_number) busFacts.push(/bus/i.test(d.bus_number) ? d.bus_number : `Bus no. ${d.bus_number}`);
-        if (d.license_plate) busFacts.push(`Plate ${d.license_plate}`);
-        this.el.dutyPlate.textContent = d.bus_number ? busFacts.join(" · ") : "Ask the admin to assign you a bus.";
+        if (d.bus_number) busFacts.push(/bus/i.test(d.bus_number) ? d.bus_number : DT("Bus no. {number}", { number: d.bus_number }));
+        if (d.license_plate) busFacts.push(DT("Plate {plate}", { plate: d.license_plate }));
+        this.el.dutyPlate.textContent = d.bus_number ? busFacts.join(" · ") : DT("Ask the admin to assign you a bus.");
         this.el.dutyBusDot.style.setProperty("--duty-color", d.bus_color || "#94a3b8");
 
         // Route: its name big, then where it goes
-        this.el.dutyRoute.textContent = d.route_name || "No route assigned yet";
+        this.el.dutyRoute.textContent = d.route_name || DT("No route assigned yet");
         this.el.dutyRouteSwatch.style.setProperty("--duty-color", d.route_color || "#94a3b8");
         if (!d.route_name) {
             this.el.dutyStops.textContent = "";
         } else if (d.from_stop) {
-            this.el.dutyStops.textContent = `From ${d.from_stop}${d.from_time ? ` at ${d.from_time}` : ""} to ${d.to_stop}`;
+            this.el.dutyStops.textContent = d.from_time
+                ? DT("From {from} at {time} to {to}", { from: d.from_stop, time: d.from_time, to: d.to_stop })
+                : DT("From {from} to {to}", { from: d.from_stop, to: d.to_stop });
         } else {
-            this.el.dutyStops.textContent = `Ends at ${d.to_stop}`;
+            this.el.dutyStops.textContent = DT("Ends at {stop}", { stop: d.to_stop });
         }
 
         const changed = !!d.changed_today;
@@ -467,6 +492,7 @@ class DriverApp {
         if (d.unseen && this.el.menu.classList.contains("open")) this.markDutySeen();
     }
 
+    /** Tells the server the driver has seen a changed duty. */
     async markDutySeen() {
         if (!this.duty || !this.duty.unseen) return;
         this.el.unseenDot.hidden = true;
@@ -491,7 +517,7 @@ class DriverApp {
             }
             const data = await resp.json().catch(() => ({}));
             if (resp.status === 404 && data.message) {
-                this.setGpsState("off", "No bus assigned");
+                this.setGpsState("off", DT("No bus assigned"));
                 this.showBanner(data.message);
                 return null;
             }
@@ -503,11 +529,13 @@ class DriverApp {
         }
     }
 
+    /** Another phone took over or the sign-in ended: back to the login page. */
     sessionLost() {
         if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
         window.location.href = "/driver/login";
     }
 
+    /** Stops GPS, signs out and goes to the start page. */
     async logout() {
         if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
         this.watchId = null;

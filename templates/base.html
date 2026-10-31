@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="{{ brand_color }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}{{ site.APP_NAME }} · {{ site.UNIVERSITY_NAME }}{% endblock %}</title>
-    <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+    <title>{% block title %}{{ tab_title() }}{% endblock %}</title>
+    {% include "_theme.html" %}
+
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    {# Words for this page's JavaScript (content/words/); map pages fill in the js_words block. #}
+    <script>window.WORDS = {% block js_words %}{}{% endblock %};</script>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/inter/inter.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
     {% block extra_css %}{% endblock %}
-
-    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
 </head>
 <body>
     <div class="app-container">

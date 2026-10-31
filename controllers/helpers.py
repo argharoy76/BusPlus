@@ -6,6 +6,7 @@ from flask import jsonify, request, session
 
 from models.bus import BUS_AUDIENCES
 from services import tracking, users
+from services.words import say
 
 
 def json_body() -> dict:
@@ -50,11 +51,11 @@ def driver_required(view):
     def wrapper(*args, **kwargs):
         driver_id = session.get("driver_id")
         if session.get("role") != "driver" or not driver_id:
-            return fail("Please log in as a driver.", 401)
+            return fail(say("Please log in as a driver."), 401)
         if not users.touch(driver_id, session.get("session_token")):
-            return fail("This account was signed in on another device. Please log in again.", 409)
+            return fail(say("This account was signed in on another device. Please log in again."), 409)
         driver = users.get_driver(driver_id)
         if not driver or not tracking.get_bus(driver.assigned_bus_id):
-            return fail("No bus is assigned to you. Ask the admin.", 404)
+            return fail(say("No bus is assigned to you. Ask the admin."), 404)
         return view(*args, bus_id=driver.assigned_bus_id, **kwargs)
     return wrapper

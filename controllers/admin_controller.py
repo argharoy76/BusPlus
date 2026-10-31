@@ -15,11 +15,12 @@ from flask import Blueprint, redirect, render_template, request, session, url_fo
 
 from config import Config
 from content import rules
-from content.site_text import DAY_NAMES
+from content.words.bus_schedule import DAY_NAMES
 from controllers.helpers import fail, json_body, ok
 from services import schedule_service, store, tracking, users
 from services.road_router import RoadRouterError, road_path
 from services.tracking_service import BUS_COLOR_PALETTE
+from services.words import say
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -33,7 +34,7 @@ def require_admin():
     if request.endpoint == "admin.login_page" or session.get("is_admin"):
         return None
     if request.path.startswith("/api/"):
-        return fail("Admin sign-in required.", 401)
+        return fail(say("Admin sign-in required."), 401)
     return redirect(url_for("admin.login_page"))
 
 
@@ -77,21 +78,22 @@ def _clean_driver_form(data: dict, creating: bool, driver_id: str | None = None)
     if creating or "full_name" in data:
         name = str(data.get("full_name") or "").strip()[:60]
         if not name:
-            return {}, "Driver name is required."
+            return {}, say("Driver name is required.")
         if users.name_taken(name, except_driver_id=driver_id):
-            return {}, f"There is already a driver called {name}. Use a different name so they can log in."
+            return {}, say("There is already a driver called {name}. Use a different name so they can log in.",
+                           name=name)
         clean["full_name"] = name
     if "phone" in data:
         clean["phone"] = str(data.get("phone") or "").strip()[:30]
     pin = str(data.get("pin") or "").strip()
     if creating or pin:
         if not PIN_RE.match(pin):
-            return {}, f"PIN must be {rules.PIN_MIN_DIGITS} to {rules.PIN_MAX_DIGITS} digits."
+            return {}, say("PIN must be {min} to {max} digits.", min=rules.PIN_MIN_DIGITS, max=rules.PIN_MAX_DIGITS)
         clean["pin"] = pin
     if creating or "assigned_bus_id" in data:
         bus_id = str(data.get("assigned_bus_id") or "").strip()
         if not tracking.get_bus(bus_id):
-            return {}, "Please choose the driver's bus."
+            return {}, say("Please choose the driver's bus.")
         clean["bus_id"] = bus_id
     return clean, None
 
@@ -104,37 +106,37 @@ def create_driver():
         return fail(error)
     driver = users.create_driver(**clean)
     tracking.show_driver_on_bus(driver.driver_id, driver.full_name, driver.assigned_bus_id)
-    return ok(message=f"Driver '{driver.full_name}' added.", driver=driver.to_dict())
+    return ok(message=say("Driver '{name}' added.", name=driver.full_name), driver=driver.to_dict())
 
 
 @admin_bp.put("/api/admin/drivers/<driver_id>")
 def update_driver(driver_id: str):
     """Edit a driver; also moves their name onto their (new) bus."""
     if users.get_driver(driver_id) is None:
-        return fail(f"Driver {driver_id} not found.", 404)
+        return fail(say("Driver {id} not found.", id=driver_id), 404)
     clean, error = _clean_driver_form(json_body(), creating=False, driver_id=driver_id)
     if error:
         return fail(error)
     driver = users.update_driver(driver_id, **clean)
     tracking.show_driver_on_bus(driver.driver_id, driver.full_name, driver.assigned_bus_id)
-    return ok(message=f"Driver '{driver.full_name}' updated.", driver=driver.to_dict())
+    return ok(message=say("Driver '{name}' updated.", name=driver.full_name), driver=driver.to_dict())
 
 
 @admin_bp.post("/api/admin/drivers/<driver_id>/unlock")
 def unlock_driver(driver_id: str):
     """Free a driver account that is stuck on another phone."""
     if not users.unlock(driver_id):
-        return fail(f"Driver {driver_id} not found.", 404)
-    return ok(message=f"Driver {driver_id} can now sign in on any phone.")
+        return fail(say("Driver {id} not found.", id=driver_id), 404)
+    return ok(message=say("Driver {id} can now sign in on any phone.", id=driver_id))
 
 
 @admin_bp.delete("/api/admin/drivers/<driver_id>")
 def delete_driver(driver_id: str):
     """Remove a driver and take their name off their bus."""
     if not users.delete_driver(driver_id):
-        return fail(f"Driver {driver_id} not found.", 404)
+        return fail(say("Driver {id} not found.", id=driver_id), 404)
     tracking.show_driver_on_bus(driver_id, None, None)
-    return ok(message=f"Driver {driver_id} deleted.")
+    return ok(message=say("Driver {id} deleted.", id=driver_id))
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +149,7 @@ def create_bus():
         bus = tracking.create_bus(json_body())
     except ValueError as err:
         return fail(str(err))
-    return ok(message=f"{bus['bus_number']} added.", bus=bus)
+    return ok(message=say("{bus} added.", bus=bus["bus_number"]), bus=bus)
 
 
 @admin_bp.put("/api/admin/buses/<bus_id>")
@@ -160,11 +162,11 @@ def update_bus(bus_id: str):
     except ValueError as err:
         return fail(str(err))
     if bus is None:
-        return fail(f"Bus {bus_id} not found.", 404)
+        return fail(say("Bus {id} not found.", id=bus_id), 404)
     if bus["assigned_route_id"] != old_route:
         for driver in users.drivers_of_bus(bus_id):
             users.mark_duty_changed(driver.driver_id)
-    return ok(message=f"{bus['bus_number']} updated.", bus=bus)
+    return ok(message=say("{bus} updated.", bus=bus["bus_number"]), bus=bus)
 
 
 @admin_bp.delete("/api/admin/buses/<bus_id>")
@@ -173,14 +175,14 @@ def delete_bus(bus_id: str):
     drivers = users.drivers_of_bus(bus_id)
     if drivers:
         names = ", ".join(d.full_name for d in drivers)
-        return fail(f"{names} is assigned to this bus. Move them to another bus in Drivers first.")
+        return fail(say("{names} is assigned to this bus. Move them to another bus in Drivers first.", names=names))
     try:
         deleted = tracking.delete_bus(bus_id)
     except ValueError as err:
         return fail(str(err))
     if not deleted:
-        return fail(f"Bus {bus_id} not found.", 404)
-    return ok(message=f"Bus {bus_id} deleted.")
+        return fail(say("Bus {id} not found.", id=bus_id), 404)
+    return ok(message=say("Bus {id} deleted.", id=bus_id))
 
 
 @admin_bp.post("/api/admin/buses/<bus_id>/simulate")
@@ -188,15 +190,15 @@ def simulate_bus(bus_id: str):
     """Test drive: move the bus along its route to Hadi Chattar without a phone. {"action": "stop"} ends it."""
     bus = tracking.get_bus(bus_id)
     if bus is None:
-        return fail(f"Bus {bus_id} not found.", 404)
+        return fail(say("Bus {id} not found.", id=bus_id), 404)
     action = json_body().get("action")            # "start", "stop", or nothing = toggle
     if action == "stop" or (action != "start" and bus.is_simulating):
         tracking.stop_trip(bus_id)
-        return ok(simulating=False, message=f"{bus.bus_number} test drive stopped.")
+        return ok(simulating=False, message=say("{bus} test drive stopped.", bus=bus.bus_number))
     if not tracking.start_simulation(bus_id, speed_multiplier=TEST_DRIVE_SPEED):
-        return fail(f"{bus.bus_number}'s route has no line to drive along.")
-    return ok(simulating=True, message=f"{bus.bus_number} is test-driving its route to "
-                                       f"{Config.FINAL_DESTINATION['stop_name']}.")
+        return fail(say("{bus}'s route has no line to drive along.", bus=bus.bus_number))
+    return ok(simulating=True, message=say("{bus} is test-driving its route to {stop}.", bus=bus.bus_number,
+                                                     stop=Config.FINAL_DESTINATION["stop_name"]))
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +210,9 @@ def snap_to_roads():
     try:
         points = [(float(p[0]), float(p[1])) for p in json_body().get("points") or []]
     except (TypeError, ValueError, IndexError):
-        return fail("Points are not valid.")
+        return fail(say("Points are not valid."))
     if not 2 <= len(points) <= 60 or not all(20 <= lat <= 27 and 88 <= lng <= 93 for lat, lng in points):
-        return fail("Use 2 to 60 points inside Bangladesh.")
+        return fail(say("Use 2 to 60 points inside Bangladesh."))
     try:
         path, distance = road_path(points)
     except RoadRouterError as err:
@@ -225,7 +227,7 @@ def create_route():
         route = tracking.create_route(json_body())
     except ValueError as err:
         return fail(str(err))
-    return ok(message=f"Route '{route['route_name']}' added.", route=route)
+    return ok(message=say("Route '{name}' added.", name=route["route_name"]), route=route)
 
 
 @admin_bp.put("/api/admin/routes/<route_id>")
@@ -236,8 +238,8 @@ def update_route(route_id: str):
     except ValueError as err:
         return fail(str(err))
     if route is None:
-        return fail(f"Route {route_id} not found.", 404)
-    return ok(message=f"Route '{route['route_name']}' updated.", route=route)
+        return fail(say("Route {id} not found.", id=route_id), 404)
+    return ok(message=say("Route '{name}' updated.", name=route["route_name"]), route=route)
 
 
 @admin_bp.put("/api/admin/schedules/<route_id>")
@@ -249,7 +251,7 @@ def save_schedule(route_id: str):
         return fail(str(err), 404)
     except ValueError as err:
         return fail(str(err))
-    return ok(message=f"Schedule of '{schedule['route_name']}' saved.", schedule=schedule)
+    return ok(message=say("Schedule of '{name}' saved.", name=schedule["route_name"]), schedule=schedule)
 
 
 @admin_bp.delete("/api/admin/routes/<route_id>")
@@ -260,6 +262,6 @@ def delete_route(route_id: str):
     except ValueError as err:
         return fail(str(err))
     if not deleted:
-        return fail(f"Route {route_id} not found.", 404)
+        return fail(say("Route {id} not found.", id=route_id), 404)
     schedule_service.delete_timetable(route_id)
-    return ok(message="Route deleted.")
+    return ok(message=say("Route deleted."))
