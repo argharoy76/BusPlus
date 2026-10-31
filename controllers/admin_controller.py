@@ -5,6 +5,7 @@ Pages:  /backend/login, /backend
 API:    /api/admin/drivers   add / edit / unlock / delete drivers
         /api/admin/buses     add / edit / delete buses, set today's route, test drive
         /api/admin/routes    add / edit / delete routes
+        /api/admin/schedules each route's bus schedule
         /api/admin/road-path snap a route to the roads (route editor)
 """
 
@@ -14,8 +15,9 @@ from flask import Blueprint, redirect, render_template, request, session, url_fo
 
 from config import Config
 from content import rules
+from content.site_text import DAY_NAMES
 from controllers.helpers import fail, json_body, ok
-from services import store, tracking, users
+from services import schedule_service, store, tracking, users
 from services.road_router import RoadRouterError, road_path
 from services.tracking_service import BUS_COLOR_PALETTE
 
@@ -55,6 +57,9 @@ def portal():
         final_destination=Config.FINAL_DESTINATION,
         bus_color_palette=BUS_COLOR_PALETTE,
         admin_username=Config.ADMIN_USERNAME,
+        schedules=schedule_service.all_timetables(),
+        day_names=DAY_NAMES,
+        today=schedule_service.today_key(),
         default_bus_seats=rules.DEFAULT_BUS_SEATS,
         max_bus_seats=rules.MAX_BUS_SEATS,
     )
@@ -235,6 +240,18 @@ def update_route(route_id: str):
     return ok(message=f"Route '{route['route_name']}' updated.", route=route)
 
 
+@admin_bp.put("/api/admin/schedules/<route_id>")
+def save_schedule(route_id: str):
+    """Save a route's weekly timetable: per day, morning (reach campus) and afternoon (leave campus) buses."""
+    try:
+        schedule = schedule_service.save_timetable(route_id, json_body())
+    except LookupError as err:
+        return fail(str(err), 404)
+    except ValueError as err:
+        return fail(str(err))
+    return ok(message=f"Schedule of '{schedule['route_name']}' saved.", schedule=schedule)
+
+
 @admin_bp.delete("/api/admin/routes/<route_id>")
 def delete_route(route_id: str):
     """Remove a route. Refused while any bus still uses it."""
@@ -244,4 +261,5 @@ def delete_route(route_id: str):
         return fail(str(err))
     if not deleted:
         return fail(f"Route {route_id} not found.", 404)
+    schedule_service.delete_timetable(route_id)
     return ok(message="Route deleted.")

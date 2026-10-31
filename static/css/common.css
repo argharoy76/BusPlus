@@ -406,3 +406,32 @@ body {
     font-size: 0.775rem;
     color: #475569;
 }
+
+/* ---- BusPlus logo (templates/_ui.html: logo) and line icons (icon) ---- */
+.bp-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    background: #0866ff;
+    border-radius: 28%;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.bp-logo-bus { line-height: 1; }
+.bp-logo-sm { width: 36px; height: 36px; }
+.bp-logo-sm .bp-logo-bus { font-size: 21px; }
+.bp-logo-md { width: 48px; height: 48px; }
+.bp-logo-md .bp-logo-bus { font-size: 28px; }
+.bp-logo-lg { width: 88px; height: 88px; border-radius: 24px; }
+.bp-logo-lg .bp-logo-bus { font-size: 52px; }
+
+.bp-icon {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}

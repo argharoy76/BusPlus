@@ -75,7 +75,7 @@ class DriverApp {
                 lat: this.bus.current_latitude || 22.8021,
                 lng: this.bus.current_longitude || 89.5340
             },
-            zoom: 14,
+            zoom: (window.APP_CONFIG?.zoom || 13) + 1,   // a little closer than the rider map
             layerSwitcher: false,
             attribution: false
         });
@@ -95,7 +95,7 @@ class DriverApp {
         this.refreshBuses();
         this.startLiveStream();
         // Fallback only: while the live stream is connected, updates arrive instantly
-        this.pollTimer = setInterval(() => { if (!this.streamLive) this.refreshBuses(); }, 3000);
+        this.pollTimer = setInterval(() => { if (!this.streamLive) this.refreshBuses(); }, window.APP_CONFIG?.refreshMs || 3000);
         this.dutyTimer = setInterval(() => this.loadDuty(), 60000);
 
         document.addEventListener("visibilitychange", () => {
@@ -109,6 +109,11 @@ class DriverApp {
     bindMenu() {
         this.el.icon.addEventListener("click", () => this.toggleMenu());
         this.el.backdrop.addEventListener("click", () => this.closeMenu());
+        // "Bus schedule": the timetable pop-up, opened on this driver's route (all buses shown)
+        document.getElementById("drv-schedule-btn")?.addEventListener("click", () => {
+            this.closeMenu();
+            window.BusSchedule?.open({ routeId: this.bus.assigned_route_id });
+        });
         document.addEventListener("keydown", (e) => { if (e.key === "Escape") this.closeMenu(); });
 
         document.querySelectorAll(".drv-view-btn").forEach(btn => {
@@ -311,16 +316,18 @@ class DriverApp {
             heading_deg: typeof heading === "number" && !Number.isNaN(heading) ? heading : null
         };
 
-        // Send every fix about once a second (sooner when the bus has moved 8 m+).
-        // If one is still on its way, keep only the newest and send it right after.
+        // Send a fix at most every GPS_SEND_EVERY_SECONDS, sooner after GPS_SEND_AFTER_METERS
+        // (both in content/rules.py). If one is still on its way, keep only the newest and send it right after.
         if (this.sending) { this.pendingFix = fix; return; }
+        const everyMs = window.APP_CONFIG?.gpsSendEveryMs || 1000;
+        const afterMeters = window.APP_CONFIG?.gpsSendAfterMeters || 8;
         const now = Date.now();
         const moved = this.lastSent.lat === null ? Infinity
             : Math.hypot(latitude - this.lastSent.lat, (longitude - this.lastSent.lng) * Math.cos(latitude * Math.PI / 180)) * 111000;
-        if (now - this.lastSent.t < 1000 && moved < 8) {
+        if (now - this.lastSent.t < everyMs && moved < afterMeters) {
             this.pendingFix = fix;
             clearTimeout(this.pendingTimer);
-            this.pendingTimer = setTimeout(() => this.flushPending(), 1000 - (now - this.lastSent.t));
+            this.pendingTimer = setTimeout(() => this.flushPending(), everyMs - (now - this.lastSent.t));
             return;
         }
         this.sendFix(fix);
@@ -361,7 +368,8 @@ class DriverApp {
         this.el.onlineSwitch.classList.toggle("on", on);
         this.el.onlineSwitch.setAttribute("aria-checked", on ? "true" : "false");
         this.el.onlineSwitch.setAttribute("aria-label", on ? "Online. Tap to go offline" : "Offline. Tap to go online");
-        this.el.onlineTitle.textContent = on ? "You are online" : "You are offline";
+        const text = window.APP_CONFIG?.text || {};
+        this.el.onlineTitle.textContent = on ? (text.online || "You are online") : (text.offline || "You are offline");
         this.el.onlineTitle.classList.toggle("off", !on);
     }
 
@@ -446,9 +454,9 @@ class DriverApp {
         if (!d.route_name) {
             this.el.dutyStops.textContent = "";
         } else if (d.from_stop) {
-            this.el.dutyStops.textContent = `From ${d.from_stop}${d.from_time ? ` at ${d.from_time}` : ""} to 🏁 ${d.to_stop}`;
+            this.el.dutyStops.textContent = `From ${d.from_stop}${d.from_time ? ` at ${d.from_time}` : ""} to ${d.to_stop}`;
         } else {
-            this.el.dutyStops.textContent = `Ends at 🏁 ${d.to_stop}`;
+            this.el.dutyStops.textContent = `Ends at ${d.to_stop}`;
         }
 
         const changed = !!d.changed_today;

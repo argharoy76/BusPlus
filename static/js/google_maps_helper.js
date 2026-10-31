@@ -34,7 +34,7 @@ class GoogleMapsHelper {
     constructor() {
         const ku = window.APP_CONFIG?.universityLocation || {};
         this.defaultCenter = { lat: ku.latitude || 22.8010, lng: ku.longitude || 89.5345 };
-        this.defaultZoom = 14;
+        this.defaultZoom = window.APP_CONFIG?.zoom || 13;   // content/map_settings.py: MAP_START_ZOOM
 
         this.leafletMap = null;
         this.layers = {};          // "roadmap" | "satellite" | "traffic" -> tile layer
@@ -66,19 +66,24 @@ class GoogleMapsHelper {
             attributionControl: false
         });
 
-        const tiles = (url) => L.tileLayer(url, { subdomains: ["0", "1", "2", "3"], maxZoom: 20 });
-        this.layers = {
-            roadmap: tiles(googleTileUrl("m", `&apistyle=${CLEAN_MAP_STYLE}`)),
-            satellite: tiles(googleTileUrl("y")),
-            traffic: tiles(googleTileUrl("m,traffic"))
-        };
-        this.layers.roadmap.addTo(this.leafletMap);
+        // Map layers come from content/map_settings.py (MAP_LAYERS); these are the defaults.
+        const layerList = window.APP_CONFIG?.layers?.length ? window.APP_CONFIG.layers : [
+            { key: "roadmap", label: "Map", url: googleTileUrl("m"), clean: true },
+            { key: "satellite", label: "Satellite", url: googleTileUrl("y") },
+            { key: "traffic", label: "Traffic", url: googleTileUrl("m,traffic") }
+        ];
+        const tiles = (layer) => L.tileLayer(layer.clean ? `${layer.url}&apistyle=${CLEAN_MAP_STYLE}` : layer.url,
+            { subdomains: ["0", "1", "2", "3"], maxZoom: 20 });
+        this.layerList = layerList;
+        this.layers = Object.fromEntries(layerList.map(layer => [layer.key, tiles(layer)]));
+        this.defaultLayer = layerList[0].key;
+        this.layers[this.defaultLayer].addTo(this.leafletMap);
 
         if (attribution) {
             const badge = L.control({ position: "bottomright" });
             badge.onAdd = () => {
                 const div = L.DomUtil.create("div", "gmap-attrib-pill");
-                div.textContent = "Google Maps · Khulna Transit";
+                div.textContent = window.APP_CONFIG?.credit || "Google Maps";
                 return div;
             };
             badge.addTo(this.leafletMap);
@@ -91,16 +96,17 @@ class GoogleMapsHelper {
     /** Adds the floating Map / Satellite / Traffic buttons. */
     addLayerSwitcher(container) {
         const icon = (paths) => `<svg class="gmap-layer-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
-        const buttons = [
-            ["roadmap", "Map", '<path d="M3 6.5l6-2.5 6 2.5 6-2.5v13.5l-6 2.5-6-2.5-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/>'],
-            ["satellite", "Satellite", '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5"/>'],
-            ["traffic", "Traffic", '<rect x="7.5" y="2.5" width="9" height="19" rx="3"/><circle cx="12" cy="7" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="17" r="1.6" fill="currentColor"/>']
-        ];
+        const ICONS = {
+            roadmap: '<path d="M3 6.5l6-2.5 6 2.5 6-2.5v13.5l-6 2.5-6-2.5-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/>',
+            satellite: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5"/>',
+            traffic: '<rect x="7.5" y="2.5" width="9" height="19" rx="3"/><circle cx="12" cy="7" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="17" r="1.6" fill="currentColor"/>'
+        };
+        const buttons = this.layerList.map(layer => [layer.key, layer.label, ICONS[layer.key] || ICONS.roadmap]);
 
         const switcher = document.createElement("div");
         switcher.className = "gmap-layer-selector";
         switcher.innerHTML = buttons.map(([layer, label, paths], i) =>
-            `<button type="button" class="gmap-layer-btn${i === 0 ? " active" : ""}" data-layer="${layer}" title="${label}" aria-label="${label}">${icon(paths)}</button>`
+            `<button type="button" class="gmap-layer-btn${i === 0 ? " active" : ""}" data-layer="${escapeHtml(layer)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon(paths)}</button>`
         ).join("");
 
         switcher.querySelectorAll(".gmap-layer-btn").forEach(btn => {
@@ -117,7 +123,7 @@ class GoogleMapsHelper {
     switchLayer(mode) {
         if (!this.leafletMap) return;
         Object.values(this.layers).forEach(layer => layer.remove());
-        (this.layers[mode] || this.layers.roadmap).addTo(this.leafletMap);
+        (this.layers[mode] || this.layers[this.defaultLayer]).addTo(this.leafletMap);
     }
 
     // ------------------------------------------------------------------
@@ -299,7 +305,7 @@ class GoogleMapsHelper {
             this.studentMarker = L.marker(latLng, { icon, zIndexOffset: 2000 }).addTo(this.leafletMap);
             this.studentMarker.bindPopup(`
                 <div class="gmap-card-popup">
-                    <h4 class="gmap-card-title">📍 Your Live Location</h4>
+                    <h4 class="gmap-card-title">Your location</h4>
                     <p class="gmap-card-metric">GPS Accuracy: ±${Math.round(accuracy)}m</p>
                 </div>`);
         }

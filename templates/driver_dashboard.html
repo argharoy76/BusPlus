@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import logo, icon %}
 
 {% block title %}{{ site.APP_NAME }} · {{ driver_button.label }}{% endblock %}
 
@@ -14,7 +15,7 @@
 
     <!-- The only control on screen: the bus icon -->
     <button type="button" id="drv-icon" class="drv-icon-btn" aria-label="Open menu" aria-expanded="false" aria-controls="drv-menu">
-        <svg class="drv-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><circle cx="8.5" cy="14" r="1" class="drv-ico-fill"/><circle cx="15.5" cy="14" r="1" class="drv-ico-fill"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>
+        {{ logo("md") }}
         <span class="drv-gps-dot" id="drv-gps-dot" title="GPS"></span>
         <span class="drv-unseen-dot" id="drv-unseen-dot" hidden></span>
     </button>
@@ -32,7 +33,7 @@
         <section class="drv-duty" id="drv-duty" aria-labelledby="drv-duty-title">
             <div class="drv-duty-top">
                 <div>
-                    <div class="drv-duty-title" id="drv-duty-title">🔔 Today's duty</div>
+                    <div class="drv-duty-title" id="drv-duty-title">{{ site.DUTY_TITLE }}</div>
                     <div class="drv-duty-date" id="drv-duty-date"></div>
                 </div>
                 <span class="drv-duty-badge" id="drv-duty-badge" hidden>Changed today</span>
@@ -40,7 +41,7 @@
             <p class="drv-duty-changed" id="drv-duty-changed" hidden>The admin changed your bus or route today.</p>
 
             <div class="drv-duty-item">
-                <div class="drv-duty-label">Your bus</div>
+                <div class="drv-duty-label">{{ site.DUTY_YOUR_BUS }}</div>
                 <div class="drv-duty-line">
                     <span class="drv-duty-icon" id="drv-duty-bus-dot">
                         <svg class="drv-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><circle cx="8.5" cy="14" r="1" class="drv-ico-fill"/><circle cx="15.5" cy="14" r="1" class="drv-ico-fill"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>
@@ -53,7 +54,7 @@
             </div>
 
             <div class="drv-duty-item">
-                <div class="drv-duty-label">Your route</div>
+                <div class="drv-duty-label">{{ site.DUTY_YOUR_ROUTE }}</div>
                 <div class="drv-duty-line">
                     <span class="drv-duty-icon route" id="drv-duty-route-swatch">
                         <svg class="drv-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><path d="M8.5 18H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.5"/><path d="M17 2.5l2.5 1.5L17 5.5"/></svg>
@@ -70,18 +71,21 @@
         <div class="drv-views" role="radiogroup" aria-label="Map view">
             <button type="button" class="drv-view-btn active" data-view="mine" role="radio" aria-checked="true">
                 <svg class="drv-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8"/></svg>
-                Your bus
+                {{ site.VIEW_YOUR_BUS }}
             </button>
             <button type="button" class="drv-view-btn" data-view="all" role="radio" aria-checked="false">
                 <svg class="drv-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="17" r="2.5"/><path d="M8 8.5l2.5 6.5M16 8.5l-2.5 6.5"/></svg>
-                All buses
+                {{ site.VIEW_ALL_BUSES }}
             </button>
         </div>
+
+        <!-- Bus schedule pop-up (all routes, opens on this driver's route) -->
+        <button type="button" class="drv-schedule-btn" id="drv-schedule-btn">{{ icon("clock") }}<span>{{ site.MENU_SCHEDULE }}</span></button>
 
         <!-- Online / Offline -->
         <div class="drv-online-row">
             <div class="drv-online-text">
-                <div class="drv-online-title" id="drv-online-title">You are online</div>
+                <div class="drv-online-title" id="drv-online-title">{{ site.DRIVER_ONLINE }}</div>
                 <div class="drv-gps-state" id="drv-gps-state">Starting GPS…</div>
             </div>
             <button type="button" class="drv-gps-retry" id="drv-gps-retry" hidden>Try again</button>
@@ -90,8 +94,10 @@
             </button>
         </div>
 
-        <button type="button" class="drv-logout" id="drv-logout">Log out</button>
+        <button type="button" class="drv-logout" id="drv-logout">{{ site.DRIVER_LOGOUT }}</button>
     </aside>
+
+    {% include "_schedule_popup.html" %}
 
     <!-- Shown only if GPS can't start -->
     <div class="drv-banner" id="drv-banner" role="alert" hidden></div>

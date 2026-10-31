@@ -269,7 +269,7 @@ def test_admin_changes_survive_restart(tmp_path):
 def test_student_sign_in_and_map(client, admin):
     assert client.get("/student/dashboard").status_code == 302                # sign in first
     page = client.get("/student/login").get_data(as_text=True)
-    assert "Student's Name" in page and "Student ID" in page
+    assert "Student login" in page and "Student ID" in page
     assert client.post("/api/auth/student/login", json={"full_name": "Tanvir", "student_id": ""}).status_code == 400
     resp = client.post("/api/auth/student/login", json={"full_name": "Tanvir Ahmed", "student_id": "260201"})
     assert resp.get_json()["redirect_url"] == "/student/dashboard"
@@ -391,3 +391,60 @@ def test_every_rider_type_gets_button_login_and_map(client):
         assert client.get(f"/{key}/dashboard").status_code == 200
     assert client.get("/nobody/login").status_code == 404
     assert client.post("/api/auth/nobody/login", json={"full_name": "A", "rider_id": "1"}).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Bus schedules (set day by day, riders see today)
+# ---------------------------------------------------------------------------
+def _week(morning=(), afternoon=()):
+    day = {"morning": [{"bus_id": b, "time": t} for b, t in morning],
+           "afternoon": [{"bus_id": b, "time": t} for b, t in afternoon]}
+    return {"days": {d: day for d in ("sat", "sun", "mon", "tue", "wed", "thu", "fri")}}
+
+
+def test_riders_see_only_todays_schedule(admin, client):
+    from services import schedule_service
+    today = schedule_service.today_key()
+    week = _week()
+    week["days"][today] = {"morning": [{"bus_id": "KU-BUS-01", "time": "08:50"}],
+                           "afternoon": [{"bus_id": "KU-BUS-01", "time": "14:30"}]}
+    assert admin.put("/api/admin/schedules/KU-R01", json=week).status_code == 200
+    data = client.get("/api/schedules").get_json()
+    assert data["day"] == today
+    route1 = {r["route_id"]: r for r in data["routes"]}["KU-R01"]
+    assert route1["morning"] == [{"time": "08:50", "bus_name": "Khan Jahan Ali Express", "color_hex": "#E11D48"}]
+    assert route1["afternoon"][0]["time"] == "14:30"
+    assert set(route1["morning"][0]) == {"time", "bus_name", "color_hex"}       # one time per bus, no extras
+
+
+def test_admin_sets_every_day_separately(admin, client):
+    week = _week(morning=[("KU-BUS-02", "09:10"), ("KU-BUS-02", "08:40")], afternoon=[("", "17:00")])
+    week["days"]["fri"] = {"morning": [], "afternoon": []}
+    assert client.put("/api/admin/schedules/KU-R02", json=week).status_code == 401      # admin only
+    saved = admin.put("/api/admin/schedules/KU-R02", json=week).get_json()["schedule"]["days"]
+    assert [t["time"] for t in saved["sat"]["morning"]] == ["08:40", "09:10"]           # sorted
+    assert saved["fri"] == {"morning": [], "afternoon": []}                             # no bus on Friday
+    for bad in (_week(morning=[("KU-BUS-02", "9am")]), _week(morning=[("NOPE", "08:00")]),
+                {"days": {"holiday": {}}}, {"days": "x"}):
+        assert admin.put("/api/admin/schedules/KU-R02", json=bad).status_code == 400
+    assert admin.put("/api/admin/schedules/NOPE", json=_week()).status_code == 404
+
+
+def test_schedule_hides_other_groups_buses(admin, client):
+    admin.put("/api/admin/buses/KU-BUS-04", json={"audience": "teacher"})
+    admin.put("/api/admin/schedules/KU-R01",
+              json=_week(morning=[("KU-BUS-01", "08:50"), ("KU-BUS-04", "09:20")]))
+    def morning(url):
+        routes = {r["route_id"]: r for r in client.get(url).get_json()["routes"]}
+        return [t["bus_name"] for t in routes["KU-R01"]["morning"]]
+    assert morning("/api/schedules?audience=student") == ["Khan Jahan Ali Express"]
+    assert morning("/api/schedules?audience=teacher") == ["Bhairab Shuttle"]
+    assert len(morning("/api/schedules")) == 2                                          # drivers see all
+
+
+def test_schedule_option_on_rider_and_driver_menus(client, driver_login, admin):
+    client.post("/api/auth/student/login", json={"full_name": "A", "rider_id": "1"})
+    assert "Bus schedule" in client.get("/student/dashboard").get_data(as_text=True)
+    driver, _ = driver_login()
+    assert "Bus schedule" in driver.get("/driver/dashboard").get_data(as_text=True)
+    assert "Bus schedules" in admin.get("/backend").get_data(as_text=True)

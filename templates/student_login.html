@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import logo, icon %}
 {# Sign-in page for every rider type (portal = its key, e.g. "student"; portal_info = its settings from content/user_types.py). #}
 
 {% block title %}{{ portal_info.label }} Login · {{ site.APP_NAME }}{% endblock %}
@@ -8,47 +9,26 @@
 {% endblock %}
 
 {% block content %}
-<!-- Ambient Background -->
-<div class="ambient-background">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-3"></div>
-</div>
+<div class="lp lp-form-page" style="--accent: {{ portal_info.color }}">
+    <header class="lp-topbar">
+        <a href="{{ url_for('views.landing') }}" class="lp-back" aria-label="Back">{{ icon("back") }}</a>
+        {{ logo("sm") }}
+    </header>
 
-<!-- Fluid Mobile Screen -->
-<div class="mobile-fullscreen-view" style="justify-content: flex-start;">
-    <!-- Top Navigation Header -->
-    <div class="mobile-nav-header">
-        <a href="{{ url_for('views.landing') }}" class="fluid-back-btn" title="Back">
-            ←
-        </a>
-        <h2 class="fluid-page-title">{{ portal_info.label }} Login</h2>
-        <div style="width: 44px;"></div>
-    </div>
+    <h1 class="lp-form-title">{{ portal_info.label }} login</h1>
 
-    <div id="login-error-box" class="fluid-error-pill" role="alert"></div>
+    <div id="login-error-box" class="lp-error" role="alert"></div>
 
-    <!-- Name + ID form -->
-    <form id="student-login-form" class="fluid-form-container" style="margin-top: 1.5rem;">
-        <!-- Option 1: Student's Name -->
-        <div class="fluid-input-wrap" style="margin-bottom: 1.25rem;">
-            <label class="fluid-question-label" for="input-student-name">
-                {{ portal_info.label }}'s Name
-            </label>
-            <input type="text" id="input-student-name" class="fluid-input" placeholder="{{ site.LOGIN_NAME_PLACEHOLDER }}" autocomplete="name" required autofocus>
-        </div>
-
-        <!-- Option 2: Student ID -->
-        <div class="fluid-input-wrap" style="margin-bottom: 1.75rem;">
-            <label class="fluid-question-label" for="input-student-id">
-                {{ portal_info.id_label }}
-            </label>
-            <input type="text" id="input-student-id" class="fluid-input" placeholder="Enter {{ portal_info.id_label | lower }}" autocomplete="off" required>
-        </div>
-
-        <!-- See Map Button -->
-        <button type="submit" class="fluid-submit-btn rider-submit-btn" style="--btn-color: {{ portal_info.color }}">
-            {{ site.LOGIN_BUTTON_TEXT }}
-        </button>
+    <form id="student-login-form" class="lp-form" novalidate>
+        <label class="lp-field">
+            <span class="lp-label">Name</span>
+            <input type="text" id="input-student-name" class="lp-input" placeholder="{{ site.LOGIN_NAME_PLACEHOLDER }}" autocomplete="name" required autofocus>
+        </label>
+        <label class="lp-field">
+            <span class="lp-label">{{ portal_info.id_label }}</span>
+            <input type="text" id="input-student-id" class="lp-input" placeholder="{{ portal_info.id_label }}" autocomplete="off" required>
+        </label>
+        <button type="submit" class="lp-submit">{{ site.LOGIN_BUTTON_TEXT }}</button>
     </form>
 </div>
 

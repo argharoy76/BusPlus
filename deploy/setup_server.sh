@@ -98,7 +98,14 @@ chmod 440 /etc/sudoers.d/busplus
 visudo -cf /etc/sudoers.d/busplus >/dev/null
 
 say "Setting up nginx for $DOMAIN"
-sed "s/YOUR_DOMAIN/$DOMAIN/g" "$APP_DIR/deploy/nginx-busplus.conf" > /etc/nginx/sites-available/busplus
+# Also serve www.<domain> when its DNS record points here.
+SERVER_NAMES="$DOMAIN"
+CERT_DOMAINS=(-d "$DOMAIN")
+if getent hosts "www.$DOMAIN" >/dev/null; then
+    SERVER_NAMES="$DOMAIN www.$DOMAIN"
+    CERT_DOMAINS+=(-d "www.$DOMAIN")
+fi
+sed "s/YOUR_DOMAIN/$SERVER_NAMES/g" "$APP_DIR/deploy/nginx-busplus.conf" > /etc/nginx/sites-available/busplus
 ln -sf /etc/nginx/sites-available/busplus /etc/nginx/sites-enabled/busplus
 rm -f /etc/nginx/sites-enabled/default
 chmod o+x /opt "$APP_DIR"                         # nginx serves /opt/busplus/static directly
@@ -111,7 +118,7 @@ ufw allow 'Nginx Full' >/dev/null
 ufw --force enable >/dev/null
 
 say "Free HTTPS certificate from Let's Encrypt"
-certbot --nginx --non-interactive --agree-tos --redirect -m "$EMAIL" -d "$DOMAIN" \
+certbot --nginx --non-interactive --agree-tos --redirect -m "$EMAIL" "${CERT_DOMAINS[@]}" \
     || echo "!! HTTPS failed. Check that $DOMAIN points to this server's IP, then run: sudo certbot --nginx -d $DOMAIN"
 
 say "Nightly database backup (03:15, kept 14 days)"

@@ -14,13 +14,18 @@ RUN IT
   Tests: pip install -r requirements-dev.txt, then: pytest
 
 CHANGE THE WEBSITE  ->  the content/ folder (plain settings, open in VS Code, restart after saving)
-  site_text.py      app name, university name, button words
+  site_text.py      app name, university name, and the words on pages, map menus and driver menu
   user_types.py     start-page buttons. Add "passenger" there and it gets a button, sign-in page,
-                    live map, a choice in the backend's Buses tab and a column in its Users tab.
-  map_settings.py   map centre, final stop (Hadi Chattar), time zone
+                    live map, a choice in the backend's Buses tab and an entry in its Users tab.
+  map_settings.py   map centre + start zoom, Map/Satellite/Traffic layers (tile URLs),
+                    final stop (Hadi Chattar), time zone, country box
   colors.py         bus / route / app colours
-  rules.py          PIN length, bus seats, driver lock time, alert minutes, login limits
-  starting_data.py  routes, buses and demo drivers for a brand-new database
+  rules.py          PIN length, driver lock time, GPS send speed, map refresh, bus seats,
+                    test-drive speed, trail length, alert minutes, login limits
+  starting_data.py  routes, buses, demo drivers and starting bus schedules for a new database
+  How it reaches the pages: Python files read content/ directly; HTML gets it through
+  app.py (content_for_templates); map JavaScript gets it as window.APP_CONFIG
+  (templates/_map_assets.html).
 
 
 HOW IT WORKS (one request, start to end)
@@ -56,7 +61,7 @@ LIBRARIES (what each is used for)
 
 MAPS - where they come from
   Map pictures (tiles): Google Maps tile servers  https://mt0-3.google.com/vt/...
-      layers Map / Satellite / Traffic  (googleTileUrl in static/js/google_maps_helper.js)
+      layers Map / Satellite / Traffic, set in content/map_settings.py (MAP_LAYERS)
   Map engine: Leaflet draws the tiles, bus markers, route lines and red trails.
   Road-following routes: OSRM public router (OpenStreetMap data), called by the server
       in services/road_router.py when the admin draws a route. Built-in route lines are
@@ -75,9 +80,10 @@ FILES AND THEIR MAIN FUNCTIONS
     auth_controller    admin_login, driver_login, rider_login, logout, search_drivers
     bus_controller     list_buses, stream_buses (live feed), driver_location, start_trip,
                        stop_trip (online/offline), driver_assignment (today's duty card)
-    route_controller   list_routes, check_arrival (alert), _best_bus_for_stop
+    route_controller   list_routes, list_schedules (Bus schedule pop-up), check_arrival (alert),
+                       _best_bus_for_stop
     admin_controller   portal (/backend), create/update/delete driver, bus, route,
-                       unlock_driver, simulate_bus (test drive), snap_to_roads
+                       unlock_driver, simulate_bus (test drive), snap_to_roads, save_schedule
     helpers            ok / fail JSON replies, driver_required check, audience_arg
 
   services/  (the logic)
@@ -88,27 +94,33 @@ FILES AND THEIR MAIN FUNCTIONS
     notification_service  arrival_alert(): IDLE / PASSED / ARRIVED / CRITICAL / WARNING / INFO
     geo                distance_km, bearing_deg, estimate_eta, local_now
     road_router        road_path() via OSRM
+    schedule_service   todays_schedules (riders/drivers see today only), all_timetables,
+                       save_timetable, seed_timetables: one weekly timetable per route, set day by
+                       day; morning = bus + time it reaches campus, afternoon = bus + time it leaves
     store              save / delete / all_rows, seed_defaults (first start), record_rider
 
   models/  (the data)
-    records.py         database tables: RouteRecord, BusRecord, DriverRecord, RiderRecord
+    records.py         database tables: RouteRecord, BusRecord, DriverRecord, RiderRecord,
+                       TimetableRecord (weekly bus schedules)
     route.py, bus.py, user.py   BusRoute/BusStop, Bus, DriverUser used while running
     rider_types.py     checks content/user_types.py, RIDER_KEYS
     seed_data.py, route_paths.py  built-in routes/buses and their road lines
 
   templates/  (HTML pages, Jinja)
     landing, driver_login, driver_dashboard, student_login + student_dashboard (used by every
-    rider type), admin_login, admin_dashboard, base (shared head), _map_assets (map files)
+    rider type), admin_login, admin_dashboard, base (shared head), _map_assets (map files),
+    _schedule_popup (the "Bus schedule" pop-up for riders and drivers)
   static/js/
     common.js          adds the CSRF token to every fetch()
     google_maps_helper.js  GoogleMapsHelper: map, markers (gliding), route lines, trails
     student_tracker.js StudentTracker + BottomSheet: rider map, route search, home, alerts
     driver_tracker.js  DriverApp: GPS sending, online/offline switch, duty card
-    admin.js           backend tabs, forms, route editor map
+    admin.js           backend tabs, forms, route editor map, day-by-day schedule editor
+    schedule.js        BusSchedule: the "Bus schedule" pop-up (route, today's Morning/Afternoon buses)
   static/css/          common, landing, student (rider map), driver, admin
 
 DATA
-  Saved (SQLite): routes, buses, drivers (PIN hashed), students/teachers who signed in.
+  Saved (SQLite): routes, buses, drivers (PIN hashed), bus schedules, students/teachers who signed in.
   Memory only:    live GPS, speed, trails (they come back with the next GPS update).
 
 SECURITY (details in SECURITY.md)

@@ -65,40 +65,31 @@ button {
     box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 6px 16px rgba(15, 23, 42, 0.35);
 }
 
-/* ---- The bus icon (top left): opens the menu ---- */
+/* ---- The BusPlus logo (top left): opens the menu ---- */
 .drv-icon-btn {
     position: absolute;
     top: 14px;
     left: 14px;
     z-index: 120;
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    border: 3px solid #ffffff;
-    background: var(--drv-blue-gradient);
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: transparent;
     cursor: pointer;
-    box-shadow: 0 6px 18px rgba(8, 102, 255, 0.35);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
     transition: transform 0.15s ease;
 }
 
-.drv-icon-btn:active {
-    transform: scale(0.94);
-}
+.drv-icon-btn .bp-logo { border-radius: 14px; box-shadow: none; }
 
-.drv-icon-btn .drv-ico {
-    width: 26px;
-    height: 26px;
+.drv-icon-btn:active {
+    transform: scale(0.95);
 }
 
 .drv-icon-btn.menu-open {
-    box-shadow: 0 0 0 4px rgba(8, 102, 255, 0.2), 0 6px 18px rgba(8, 102, 255, 0.35);
+    box-shadow: 0 0 0 3px rgba(8, 102, 255, 0.25), 0 4px 14px rgba(15, 23, 42, 0.22);
 }
 
-/* GPS state dot on the icon: amber = starting, green = sending, red = problem, grey = offline */
 .drv-gps-dot {
     position: absolute;
     right: -3px;
@@ -514,3 +505,22 @@ button {
     .drv-menu { top: 82px; left: 18px; width: 340px; }
     .drv-banner { left: auto; right: 18px; margin: 0; width: 420px; }
 }
+
+/* "Bus schedule" button in the driver's menu */
+.drv-schedule-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    height: 46px;
+    margin-top: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+    font: inherit;
+    font-weight: 700;
+    color: #0f172a;
+    cursor: pointer;
+}
+.drv-schedule-btn:hover { background: #f1f5f9; }

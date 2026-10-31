@@ -68,3 +68,28 @@ DEMO_DRIVERS = [
     ("DRV-04", "siraj", "Siraj Uddin", "+880 1913-654321", "KU-BUS-04"),
 ]
 DEMO_DRIVER_PIN = "1234"   # PIN of every demo driver
+
+# ---- BUS SCHEDULES ------------------------------------------------------------
+# Starting timetable of each route. Afterwards it is edited day by day in the backend
+# (Schedules tab). Also added once to a server that already has data but no timetables.
+#   days:      the days these times apply to ("sat", "sun", "mon", "tue", "wed", "thu", "fri")
+#   morning:   (bus ID, time the bus REACHES the campus)
+#   afternoon: (bus ID, time the bus LEAVES the campus)
+# Times are 24-hour "HH:MM".
+SCHEDULES = {
+    "KU-R01": {
+        "days": ["sat", "sun", "mon", "tue", "wed", "thu"],
+        "morning": [("KU-BUS-01", "08:50"), ("KU-BUS-04", "09:20")],
+        "afternoon": [("KU-BUS-01", "14:30"), ("KU-BUS-04", "17:00")],
+    },
+    "KU-R02": {
+        "days": ["sat", "sun", "mon", "tue", "wed", "thu"],
+        "morning": [("KU-BUS-02", "08:45")],
+        "afternoon": [("KU-BUS-02", "14:30"), ("KU-BUS-02", "17:15")],
+    },
+    "KU-R03": {
+        "days": ["sun", "mon", "tue", "wed", "thu"],
+        "morning": [("KU-BUS-03", "09:00")],
+        "afternoon": [("KU-BUS-03", "15:00")],
+    },
+}

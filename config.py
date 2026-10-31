@@ -62,6 +62,11 @@ class Config:
     ENV_NAME = os.environ.get("BUSPLUS_ENV", "development").strip().lower()
     IS_PRODUCTION = ENV_NAME == "production"
     DEBUG = env_bool("FLASK_DEBUG", False) and not IS_PRODUCTION
+
+    # On your computer, `python app.py` restarts itself when a .py file changes and
+    # shows edited HTML templates straight away (just refresh the browser).
+    AUTO_RELOAD = env_bool("BUSPLUS_AUTO_RELOAD", True) and not IS_PRODUCTION
+    TEMPLATES_AUTO_RELOAD = AUTO_RELOAD
     TESTING = False
 
     # Where `python app.py` listens (production uses gunicorn instead, see gunicorn.conf.py).

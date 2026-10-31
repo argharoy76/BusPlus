@@ -20,4 +20,18 @@ TIMEZONE = "Asia/Dhaka"
 # Rough box around the country. Route points and GPS outside it are refused (catches typos).
 COUNTRY_BOUNDS = {"lat": (20.0, 27.0), "lng": (88.0, 93.0)}
 
-# The map pictures ("tiles") come from Google Maps: see googleTileUrl in static/js/google_maps_helper.js.
+# How close the map starts (bigger number = closer; 13 shows the city, 16 shows streets).
+MAP_START_ZOOM = 13
+
+# The Map / Satellite / Traffic buttons on every map. The first one is shown when a map opens.
+# "url" is where the map pictures (tiles) come from - here Google Maps. {s}, {x}, {y}, {z} are
+# filled in by the map. "clean": True hides shop/business icons on that layer.
+# Remove a block to remove its button; reorder blocks to change the order.
+MAP_LAYERS = [
+    {"key": "roadmap", "label": "Map", "url": "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", "clean": True},
+    {"key": "satellite", "label": "Satellite", "url": "https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"},
+    {"key": "traffic", "label": "Traffic", "url": "https://mt{s}.google.com/vt/lyrs=m,traffic&x={x}&y={y}&z={z}"},
+]
+
+# Small label in the map's corner.
+MAP_CREDIT = "Google Maps · Khulna Transit"

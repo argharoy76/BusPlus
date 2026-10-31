@@ -472,3 +472,96 @@ document.querySelectorAll("time.local-time").forEach(el => {
     const when = new Date(el.getAttribute("datetime"));
     if (!isNaN(when)) el.textContent = when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 });
+
+// ---------- Schedules (one weekly timetable per route) ----------
+// The modal edits a copy of the route's week (scheduleWeek) one day at a time; Save sends the whole week.
+let scheduleRouteId = null;
+let scheduleWeek = null;
+let scheduleDay = null;
+
+/** <option>s for the bus picker: buses on this route first, then the other buses. */
+function busOptions(routeId, selected) {
+    const group = (label, buses) => buses.length
+        ? `<optgroup label="${esc(label)}">${buses.map(b =>
+            `<option value="${esc(b.bus_id)}" ${b.bus_id === selected ? "selected" : ""}>${esc(b.bus_name)} · ${esc(b.bus_number)}</option>`).join("")}</optgroup>`
+        : "";
+    const onRoute = ADMIN_DATA.buses.filter(b => b.assigned_route_id === routeId);
+    const others = ADMIN_DATA.buses.filter(b => b.assigned_route_id !== routeId);
+    return `<option value="">— Choose bus —</option>${group("On this route", onRoute)}${group("Other buses", others)}`;
+}
+
+/** Reads the rows on screen back into scheduleWeek for the day being edited. */
+function storeScheduleDay() {
+    if (!scheduleDay) return;
+    ["morning", "afternoon"].forEach(part => {
+        scheduleWeek[scheduleDay][part] = Array.from(document.querySelectorAll(`#trips-${part} .trip-row`))
+            .map(row => ({ bus_id: row.querySelector(".trip-bus").value, time: row.querySelector(".trip-time").value }))
+            .filter(t => t.bus_id || t.time);
+    });
+}
+
+function addTripRow(part, trip = { bus_id: "", time: "" }) {
+    const row = document.createElement("div");
+    row.className = "trip-row";
+    row.innerHTML = `
+        <select class="custom-select trip-bus" aria-label="Bus">${busOptions(scheduleRouteId, trip.bus_id)}</select>
+        <input type="time" class="custom-input trip-time" aria-label="Time">
+        <button type="button" class="trip-remove" aria-label="Remove">✕</button>`;
+    row.querySelector(".trip-time").value = trip.time;
+    row.querySelector(".trip-remove").addEventListener("click", () => { row.remove(); storeScheduleDay(); updateDayCounts(); });
+    row.querySelectorAll("select, input").forEach(field => field.addEventListener("change", () => { storeScheduleDay(); updateDayCounts(); }));
+    document.getElementById(`trips-${part}`).appendChild(row);
+}
+
+/** Small number on each day tab = how many buses that day (empty = no bus). */
+function updateDayCounts() {
+    document.querySelectorAll("#schedule-day-tabs .day-tab").forEach(tab => {
+        const d = scheduleWeek[tab.dataset.day];
+        const n = d.morning.length + d.afternoon.length;
+        tab.querySelector(".day-tab-count").textContent = n ? `${n} bus${n > 1 ? "es" : ""}` : "Off";
+        tab.classList.toggle("is-off", !n);
+    });
+}
+
+function showScheduleDay(day) {
+    storeScheduleDay();
+    scheduleDay = day;
+    document.querySelectorAll("#schedule-day-tabs .day-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.day === day));
+    ["morning", "afternoon"].forEach(part => {
+        document.getElementById(`trips-${part}`).replaceChildren();
+        scheduleWeek[day][part].forEach(trip => addTripRow(part, trip));
+    });
+    updateDayCounts();
+}
+
+function openScheduleModal(routeId) {
+    const s = ADMIN_DATA.schedules.find(x => x.route_id === routeId);
+    if (!s) return;
+    showFormError("schedule-form-error", "");
+    scheduleRouteId = routeId;
+    scheduleWeek = JSON.parse(JSON.stringify(s.days));
+    scheduleDay = null;
+    document.getElementById("schedule-modal-title").textContent = s.route_name;
+    showScheduleDay(ADMIN_DATA.today);                          // today in Bangladesh time (from the server)
+    openModal("modal-schedule");
+}
+
+document.querySelectorAll("#schedule-day-tabs .day-tab").forEach(tab =>
+    tab.addEventListener("click", () => showScheduleDay(tab.dataset.day)));
+document.querySelectorAll(".add-trip").forEach(btn =>
+    btn.addEventListener("click", () => { addTripRow(btn.dataset.part); }));
+document.getElementById("schedule-copy-all")?.addEventListener("click", () => {
+    storeScheduleDay();
+    const source = JSON.stringify(scheduleWeek[scheduleDay]);
+    Object.keys(scheduleWeek).forEach(day => { scheduleWeek[day] = JSON.parse(source); });
+    updateDayCounts();
+    toast("Copied to all days. Press Save to keep it.");
+});
+
+document.getElementById("form-schedule")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    storeScheduleDay();
+    const { ok, data } = await api("PUT", `/api/admin/schedules/${encodeURIComponent(scheduleRouteId)}`, { days: scheduleWeek });
+    if (ok) location.reload();
+    else showFormError("schedule-form-error", data.message || "Could not save the schedule.");
+});

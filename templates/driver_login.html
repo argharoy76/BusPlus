@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import logo, icon %}
 
 {% block title %}{{ driver_button.label }} Login · {{ site.APP_NAME }}{% endblock %}
 
@@ -7,54 +8,37 @@
 {% endblock %}
 
 {% block content %}
-<!-- Ambient Background -->
-<div class="ambient-background">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-</div>
+<div class="lp lp-form-page" style="--accent: {{ driver_button.color }}">
+    <header class="lp-topbar">
+        <a href="{{ url_for('views.landing') }}" class="lp-back" aria-label="Back">{{ icon("back") }}</a>
+        {{ logo("sm") }}
+    </header>
 
-<!-- Fluid Mobile Screen (No Box Structure) -->
-<div class="mobile-fullscreen-view" style="justify-content: flex-start;">
-    <!-- Top Navigation Header -->
-    <div class="mobile-nav-header">
-        <a href="{{ url_for('views.landing') }}" class="fluid-back-btn" title="Back">
-            ←
-        </a>
-        <h2 class="fluid-page-title">{{ driver_button.label }} Login</h2>
-        <div style="width: 44px;"></div> <!-- Spacer -->
-    </div>
+    <h1 class="lp-form-title">{{ driver_button.label }} login</h1>
 
-    <!-- Error Alert Pill (Animated Shake) -->
-    <div id="login-error-box" class="fluid-error-pill"></div>
+    <div id="login-error-box" class="lp-error" role="alert"></div>
 
-    <!-- Fluid Form -->
-    <form id="driver-login-form" class="fluid-form-container">
-        <!-- 1. Driver Name (Type & Autocomplete) -->
-        <div class="fluid-input-wrap">
-            <input type="text" id="input-driver-name" class="fluid-input" placeholder="Driver name" autocomplete="off" required>
+    <form id="driver-login-form" class="lp-form" novalidate>
+        <label class="lp-field lp-field-suggest">
+            <span class="lp-label">Name</span>
+            <input type="text" id="input-driver-name" class="lp-input" placeholder="Your name" autocomplete="off" required>
             <input type="hidden" id="hidden-driver-id">
             <div id="driver-suggestions" class="fluid-autocomplete-dropdown"></div>
-        </div>
-
-        <!-- 2. Route Option (under the name) -->
-        <div class="fluid-input-wrap">
-            <select id="select-driver-route" class="fluid-select" required>
+        </label>
+        <label class="lp-field">
+            <span class="lp-label">Route</span>
+            <select id="select-driver-route" class="lp-input lp-select" required>
                 <option value="" disabled selected>Select route</option>
                 {% for r in routes %}
                 <option value="{{ r.route_id }}">{{ r.route_name }}</option>
                 {% endfor %}
             </select>
-        </div>
-
-        <!-- 3. PIN Option (under the route) -->
-        <div class="fluid-input-wrap">
-            <input type="password" id="input-driver-pin" class="fluid-input" placeholder="PIN" inputmode="numeric" autocomplete="current-password" required>
-        </div>
-
-        <!-- Animated Submit Button -->
-        <button type="submit" class="fluid-submit-btn">
-            {{ site.DRIVER_LOGIN_BUTTON_TEXT }}
-        </button>
+        </label>
+        <label class="lp-field">
+            <span class="lp-label">PIN</span>
+            <input type="password" id="input-driver-pin" class="lp-input" placeholder="••••" inputmode="numeric" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="lp-submit">{{ site.DRIVER_LOGIN_BUTTON_TEXT }}</button>
     </form>
 </div>
 
@@ -135,7 +119,7 @@
 
     // Close autocomplete on click outside
     document.addEventListener("click", (e) => {
-        if (!e.target.closest(".fluid-input-wrap")) {
+        if (!e.target.closest(".lp-field-suggest")) {
             suggestionsMenu.style.display = "none";
         }
     });

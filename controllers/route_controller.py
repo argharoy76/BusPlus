@@ -2,6 +2,7 @@
 Routes and arrival alerts for the students' and teachers' map (public, read only).
 
   GET /api/routes               every route with its road line and stops
+  GET /api/schedules            today's bus schedule of every route
   GET /api/notification/check   how far the bus is from the rider's stop, and whether to alert
 """
 
@@ -11,7 +12,7 @@ from config import Config
 from controllers.helpers import audience_arg, ok, optional_float
 from models.bus import Bus
 from models.route import BusStop
-from services import geo, tracking
+from services import geo, schedule_service, tracking
 from services.notification_service import arrival_alert
 
 route_bp = Blueprint("routes", __name__)
@@ -22,6 +23,16 @@ def list_routes():
     """Every route with its road line, stops and colour."""
     routes = tracking.all_routes()
     return ok(count=len(routes), routes=routes)
+
+
+@route_bp.get("/api/schedules")
+def list_schedules():
+    """
+    TODAY's timetable of every route for the "Bus schedule" pop-up: morning buses with the
+    time they reach the campus, afternoon buses with the time they leave it.
+    ?audience=student|teacher|... leaves out buses meant for another group (drivers see all).
+    """
+    return ok(**schedule_service.todays_schedules(audience_arg()))
 
 
 @route_bp.get("/api/notification/check")

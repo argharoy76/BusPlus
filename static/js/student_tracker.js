@@ -12,6 +12,9 @@
 
 /** Bus icon used in the list (front view of a bus, drawn with the current text colour). */
 const BUS_ICON_SVG = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="14.5" rx="3"/><path d="M5 10.5h14"/><path d="M9.5 6.5h5"/><circle cx="8.5" cy="14" r="1" class="ico-fill"/><circle cx="15.5" cy="14" r="1" class="ico-fill"/><path d="M7.5 17.5v2.5M16.5 17.5v2.5"/></svg>';
+/** Small line icons used inside lists and pop-up messages (static markup, no user data). */
+const PIN_ICON_SVG = '<svg class="bp-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+const BELL_ICON_SVG = '<svg class="bp-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8.5a6 6 0 0 1 12 0c0 6.5 2.5 8.5 2.5 8.5h-17S6 15 6 8.5z"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></svg>';
 
 /** Screens this wide show the sheet as a fixed side panel (must match the @media rule in student.css). */
 const isWideScreen = () => window.matchMedia("(min-width: 900px)").matches;
@@ -323,7 +326,7 @@ class StudentTracker {
 
     async init() {
         const helper = window.googleMapsHelper;
-        helper.initMap("student-map", { zoom: 13 });
+        helper.initMap("student-map");
 
         this.syncPreferencesUi();
         helper.updateHomeLocationMarker(this.homeLat, this.homeLng);
@@ -347,7 +350,7 @@ class StudentTracker {
         // Live data: the stream pushes changes; the 3-second poll covers gaps
         this.fetchLiveTrackingData();
         this.startLiveStream();
-        setInterval(() => this.fetchLiveTrackingData(), 3000);
+        setInterval(() => this.fetchLiveTrackingData(), window.APP_CONFIG?.refreshMs || 3000);
     }
 
     // =====================================================================
@@ -494,7 +497,7 @@ class StudentTracker {
             row.id = `side-home-suggestion-${idx}`;
 
             const icon = span("side-suggestion-icon");
-            icon.textContent = "📍";
+            icon.innerHTML = PIN_ICON_SVG;
             const text = span("side-suggestion-text");
             const nameEl = span("side-suggestion-name");
             this.appendHighlighted(nameEl, place.name, q);
@@ -608,7 +611,7 @@ class StudentTracker {
         } else {
             hint.className = "side-minutes-hint is-ok";
             const unit = minutes === 1 ? "minute" : "minutes";
-            hint.textContent = `✓ You'll be notified ${minutes} ${unit} before the bus reaches ${this.getAlertStopName()}.`;
+            hint.textContent = `You'll be notified ${minutes} ${unit} before the bus reaches ${this.getAlertStopName()}.`;
         }
     }
 
@@ -646,7 +649,7 @@ class StudentTracker {
         this.alertTriggerCount = 0;
         this.fetchLiveTrackingData();
         window.googleMapsHelper.updateHomeLocationMarker(this.homeLat, this.homeLng);
-        this.showToast("🏡 Home Saved", "toast-success");
+        this.showToast("Home saved", "toast-success");
     }
 
     /** Saves how many minutes before arrival the alert should go off. */
@@ -670,7 +673,7 @@ class StudentTracker {
         settings.set("busplus_alert_frequency", freqVal);
         this.alertTriggerCount = 0;
         this.updateMenuSummaries();
-        this.showToast("🔔 Alert Frequency", "toast-info");
+        this.showToast("Notification updated", "toast-info");
     }
 
     /** "Locate Me": shows the rider's GPS position on the map. */
@@ -680,6 +683,8 @@ class StudentTracker {
             return;
         }
         const setLabel = (text) => { if (this.btnLocateLabel) this.btnLocateLabel.textContent = text; };
+        const original = this.btnLocateLabel?.dataset.label || this.btnLocateLabel?.textContent || "Locate Me";
+        if (this.btnLocateLabel) this.btnLocateLabel.dataset.label = original;   // words from content/site_text.py
 
         setLabel("Locating...");
         navigator.geolocation.getCurrentPosition(
@@ -687,11 +692,11 @@ class StudentTracker {
                 window.googleMapsHelper.updateStudentLocationMarker(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
                 setLabel("GPS Active");
                 this.btnLocateMe.classList.add("active");
-                this.showToast("📍 GPS Located", "toast-success");
+                this.showToast("Location found", "toast-success");
             },
             () => {
-                setLabel("Locate Me");
-                alert("Could not access your location. Please check browser GPS permissions.");
+                setLabel(original);
+                this.showToast("Could not get your location. Please allow location access for this site.", "toast-warning");
             },
             { enableHighAccuracy: true, timeout: 8000 }
         );
@@ -746,7 +751,7 @@ class StudentTracker {
         }
     }
 
-    /** Asks the server how far the watched bus is from the Home stop; updates the 🏡 line and alerts. */
+    /** Asks the server how far the watched bus is from the Home stop; updates the Home line and alerts. */
     async checkArrival() {
         const target = this.getAlertTarget();
         if (!target.routeId) {
@@ -812,7 +817,7 @@ class StudentTracker {
         return { routeId: first ? first.route_id : null, busId: null, stopName };
     }
 
-    /** Updates the 🏡 line in the sheet: arrival time at the Home stop, shown only while a live bus is coming. */
+    /** Updates the Home line in the sheet: arrival time at the Home stop, shown only while a live bus is coming. */
     updateHomeStrip(alertInfo, target) {
         if (!this.homeStrip || !this.homeStripText || !this.homeStripEta) return;
         this.homeStrip.classList.remove("is-alert");
@@ -1159,7 +1164,7 @@ class StudentTracker {
                 ? this.latestBuses.filter(b => b.assigned_route_id === this.routeFilter)
                 : this.latestBuses;
             const liveFirst = [...list].sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0));
-            this.sheetTitle.textContent = this.routeFilter ? "Buses" : "All buses";
+            this.sheetTitle.textContent = this.routeFilter ? "Buses" : (window.APP_CONFIG?.text?.allBuses || "All buses");
             if (this.sheetCount) this.sheetCount.textContent = String(list.length);
             this.sheetContent.innerHTML = liveFirst.map(b => this.busRowHtml(b)).join("");
         }
@@ -1251,7 +1256,7 @@ class StudentTracker {
         toast.className = `toast ${type}`;
         const icon = document.createElement("div");
         icon.className = "toast-icon";
-        icon.textContent = "🚌";
+        icon.innerHTML = BELL_ICON_SVG;
         const text = document.createElement("div");
         text.className = "toast-title";
         text.textContent = title;

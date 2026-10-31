@@ -74,3 +74,19 @@ class RiderRecord(db.Model):
     full_name: Mapped[str] = mapped_column(String(60))
     first_seen_at: Mapped[str] = mapped_column(String(40))
     last_seen_at: Mapped[str] = mapped_column(String(40))
+
+
+class TimetableRecord(db.Model):
+    """
+    The bus timetable of one route, set day by day in the backend.
+
+    days: {"sat": {"morning":   [{"bus_id": "KU-BUS-01", "time": "08:50"}, ...],   # reaches campus
+                   "afternoon": [{"bus_id": "KU-BUS-01", "time": "14:30"}, ...]},  # leaves campus
+           "sun": {...}, ...}        a day that is missing or empty = no bus that day
+    Times are 24-hour "HH:MM".
+    """
+
+    __tablename__ = "route_timetables"
+
+    route_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    days: Mapped[dict] = mapped_column(JSON, default=dict)

@@ -11,6 +11,7 @@ Run on your computer:   python app.py
 Run on the server:      gunicorn -c gunicorn.conf.py wsgi:app   (see DEPLOYMENT.md)
 """
 
+import os
 from pathlib import Path
 
 try:
@@ -19,11 +20,11 @@ try:
     from werkzeug.middleware.proxy_fix import ProxyFix
 
     from config import Config
-    from content import colors, rules, site_text
+    from content import colors, map_settings, rules, site_text
     from controllers import ALL_BLUEPRINTS
     from extensions import csrf, db, limiter, talisman
     from models.rider_types import DRIVER, RIDER_TYPES
-    from services import store, tracking, users
+    from services import schedule_service, store, tracking, users
 except ModuleNotFoundError as missing:
     # A library from requirements.txt isn't installed yet: say how to fix it instead of a long error.
     raise SystemExit(f"\nMissing library: {missing.name}\nInstall BusPlus's libraries first, then start again:\n"
@@ -81,6 +82,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         store.seed_defaults(with_demo_drivers=app.config["SEED_DEMO_DRIVERS"])
         tracking.load()
         users.load()
+        schedule_service.seed_timetables()
         for driver in users.all_drivers():
             tracking.show_driver_on_bus(driver.driver_id, driver.full_name, driver.assigned_bus_id)
 
@@ -88,6 +90,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         app.register_blueprint(blueprint)
     _register_error_handlers(app)
     _add_static_versions(app)
+
+    @app.template_filter("clock")
+    def clock(hhmm: str) -> str:
+        """24-hour "13:30" -> "01:30 PM" (used for bus schedule times in templates)."""
+        hours, minutes = (int(part) for part in hhmm.split(":"))
+        return f"{hours % 12 or 12:02d}:{minutes:02d} {'AM' if hours < 12 else 'PM'}"
 
     @app.context_processor
     def content_for_templates() -> dict:
@@ -98,6 +106,17 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             "driver_button": DRIVER,
             "brand_color": colors.BRAND_COLOR,
             "pin_rules": {"min": rules.PIN_MIN_DIGITS, "max": rules.PIN_MAX_DIGITS},
+            # Map and timing settings for the map pages' JavaScript (templates/_map_assets.html)
+            "map_config": {
+                "layers": map_settings.MAP_LAYERS,
+                "zoom": map_settings.MAP_START_ZOOM,
+                "credit": map_settings.MAP_CREDIT,
+                "gpsSendEveryMs": int(rules.GPS_SEND_EVERY_SECONDS * 1000),
+                "gpsSendAfterMeters": rules.GPS_SEND_AFTER_METERS,
+                "refreshMs": int(rules.MAP_REFRESH_SECONDS * 1000),
+                "text": {"online": site_text.DRIVER_ONLINE, "offline": site_text.DRIVER_OFFLINE,
+                         "allBuses": site_text.ALL_BUSES_TITLE},
+            },
         }
 
     return app
@@ -148,12 +167,17 @@ def _register_error_handlers(app: Flask) -> None:
 
 if __name__ == "__main__":
     application = create_app()
-    print("=" * 60)
-    print(" BusPlus - Khulna University bus tracker")
-    print(f" App:     http://localhost:{Config.PORT}")
-    print(f" Backend: http://localhost:{Config.PORT}/backend")
-    print(f"          username: {Config.ADMIN_USERNAME}")
-    print("          password: in instance/admin_password.txt (or BUSPLUS_ADMIN_PASSWORD in .env)")
-    print("=" * 60)
-    # threaded: every open map keeps one live connection for instant bus updates
-    application.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG, threaded=True)
+    if not os.environ.get("WERKZEUG_RUN_MAIN"):          # print once, not again after each auto-restart
+        print("=" * 60)
+        print(" BusPlus - Khulna University bus tracker")
+        print(f" App:     http://localhost:{Config.PORT}")
+        print(f" Backend: http://localhost:{Config.PORT}/backend")
+        print(f"          username: {Config.ADMIN_USERNAME}")
+        print("          password: in instance/admin_password.txt (or BUSPLUS_ADMIN_PASSWORD in .env)")
+        if Config.AUTO_RELOAD:
+            print(" Auto reload is on: save your changes, then just refresh the browser.")
+        print("=" * 60)
+    # threaded: every open map keeps one live connection for instant bus updates.
+    # use_reloader: restart by itself when you save a .py file (content/ too), see Config.AUTO_RELOAD.
+    application.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG,
+                    use_reloader=Config.AUTO_RELOAD, threaded=True)

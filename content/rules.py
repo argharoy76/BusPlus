@@ -11,6 +11,14 @@ PIN_MAX_DIGITS = 8
 # this many minutes, the driver may sign in on another phone.
 DRIVER_LOCK_MINUTES = 10
 
+# The driver's phone sends its position at most this often (seconds) ...
+GPS_SEND_EVERY_SECONDS = 1
+# ... or sooner when the bus has moved this many metres.
+GPS_SEND_AFTER_METERS = 8
+
+# If a map loses its live connection, it asks for the buses this often instead (seconds).
+MAP_REFRESH_SECONDS = 3
+
 # ---- Buses ------------------------------------------------------------------
 DEFAULT_BUS_SEATS = 52       # seats of a new bus if the admin leaves it empty
 MAX_BUS_SEATS = 120          # largest number of seats the backend accepts

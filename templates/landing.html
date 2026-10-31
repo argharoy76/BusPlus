@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_ui.html" import logo, icon, rider_icon %}
 
 {% block title %}{{ site.APP_NAME }} · {{ site.UNIVERSITY_NAME }}{% endblock %}
 
@@ -7,46 +8,27 @@
 {% endblock %}
 
 {% block content %}
-<!-- Ambient Floating Glowing Orbs Background -->
-<div class="ambient-background">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-</div>
+<div class="lp">
+    <header class="lp-brand">
+        {{ logo("lg") }}
+        <h1 class="lp-title">{{ site.APP_NAME }}</h1>
+        <p class="lp-subtitle">{{ site.UNIVERSITY_NAME }}</p>
+    </header>
 
-<!-- Fluid Mobile Fullscreen Layout -->
-<div class="mobile-fullscreen-view">
-    <!-- Center Hero Branding with Animated Radar Pulse -->
-    <div class="brand-hero-section">
-        <div class="floating-logo-stage">
-            <div class="pulse-ring"></div>
-            <div class="pulse-ring delay-1"></div>
-            <div class="pulse-ring delay-2"></div>
-            <div class="floating-bus-badge">🚌</div>
-        </div>
-
-        <h1 class="app-brand-title">{{ site.APP_NAME }}</h1>
-        <span class="app-brand-badge">{{ site.UNIVERSITY_NAME }}</span>
-    </div>
-
-    <!-- Buttons: Driver first, then one per rider type (edit them in content/user_types.py) -->
-    <div class="fluid-actions-stack">
-        <a href="{{ url_for('views.driver_login') }}" class="fluid-touch-btn" style="--btn-color: {{ driver_button.color }}">
-            <div class="btn-label">
-                <div class="btn-icon-wrapper">{{ driver_button.icon }}</div>
-                <span>{{ driver_button.label }}</span>
-            </div>
-            <div class="btn-arrow-pill">›</div>
+    {# Driver first, then one option per rider type (content/user_types.py) #}
+    <nav class="lp-options">
+        <a href="{{ url_for('views.driver_login') }}" class="lp-option" style="--accent: {{ driver_button.color }}">
+            <span class="lp-option-icon">{{ rider_icon("driver") }}</span>
+            <span class="lp-option-label">{{ driver_button.label }}</span>
+            {{ icon("chevron", "lp-option-chevron") }}
         </a>
         {% for key, rider in rider_types.items() %}
-        <a href="{{ url_for('views.rider_login', rider_type=key) }}" class="fluid-touch-btn" style="--btn-color: {{ rider.color }}">
-            <div class="btn-label">
-                <div class="btn-icon-wrapper">{{ rider.icon }}</div>
-                <span>{{ rider.label }}</span>
-            </div>
-            <div class="btn-arrow-pill">›</div>
+        <a href="{{ url_for('views.rider_login', rider_type=key) }}" class="lp-option" style="--accent: {{ rider.color }}">
+            <span class="lp-option-icon">{{ rider_icon(key) }}</span>
+            <span class="lp-option-label">{{ rider.label }}</span>
+            {{ icon("chevron", "lp-option-chevron") }}
         </a>
         {% endfor %}
-    </div>
+    </nav>
 </div>
 {% endblock %}

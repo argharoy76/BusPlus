@@ -36,6 +36,7 @@
                     <li><div id="nav-drivers" class="admin-nav-item active" onclick="switchTab('drivers')"><span>👨‍✈️</span> Drivers</div></li>
                     <li><div id="nav-routes" class="admin-nav-item" onclick="switchTab('routes')"><span>🛣️</span> Routes</div></li>
                     <li><div id="nav-buses" class="admin-nav-item" onclick="switchTab('buses')"><span>🚌</span> Buses</div></li>
+                    <li><div id="nav-schedules" class="admin-nav-item" onclick="switchTab('schedules')"><span>🕒</span> Schedules</div></li>
                     <li><div id="nav-users" class="admin-nav-item" onclick="switchTab('users')"><span>🎓</span> Users</div></li>
                 </ul>
             </div>
@@ -269,6 +270,47 @@
             </section>
 
             <!-- ================= USERS (every rider type) ================= -->
+            <!-- ================= SCHEDULES (one weekly timetable per route) ================= -->
+            <section id="tab-schedules" class="tab-section">
+                <div class="admin-header-row">
+                    <div class="admin-title">
+                        <h2>Bus schedules</h2>
+                        <p>Set each route's buses for every day. Riders see today's schedule.</p>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Route</th>
+                                {% for key, name in day_names.items() %}<th class="week-col">{{ name[:3] }}</th>{% endfor %}
+                                <th style="text-align:right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in schedules %}
+                            <tr>
+                                <td><span class="sched-swatch" style="background: {{ s.color_hex }}"></span> <b>{{ s.route_name }}</b></td>
+                                {% for key in day_names %}
+                                {% set d = s.days[key] %}
+                                <td class="week-col">
+                                    {% if d.morning or d.afternoon %}
+                                    <span class="week-pill" title="Morning {{ d.morning|length }} · Afternoon {{ d.afternoon|length }}">{{ d.morning|length }}<i>·</i>{{ d.afternoon|length }}</span>
+                                    {% else %}<span class="week-off">—</span>{% endif %}
+                                </td>
+                                {% endfor %}
+                                <td style="text-align:right;">
+                                    <button class="btn btn-secondary btn-sm" onclick='openScheduleModal({{ s.route_id | tojson }})'>Edit</button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="9" class="empty-row">Add a route first.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <section id="tab-users" class="tab-section">
                 <div class="admin-header-row">
                     <div class="admin-title">
@@ -298,6 +340,42 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- ================= Schedule modal (one route, day by day) ================= -->
+    <div id="modal-schedule" class="modal-overlay">
+        <div class="modal-card wide">
+            <div class="modal-head">
+                <h3 id="schedule-modal-title">Bus schedule</h3>
+                <button class="modal-close" onclick="closeModal('modal-schedule')" aria-label="Close">✕</button>
+            </div>
+            <form id="form-schedule" novalidate>
+                <div id="schedule-form-error" class="form-error"></div>
+                <div class="day-tabs" id="schedule-day-tabs" role="tablist">
+                    {% for key, name in day_names.items() %}
+                    <button type="button" class="day-tab" data-day="{{ key }}" role="tab"><span>{{ name[:3] }}</span><span class="day-tab-count"></span></button>
+                    {% endfor %}
+                </div>
+                <div class="sched-edit-grid">
+                    <div class="sched-edit-col">
+                        <div class="sched-edit-head"><span>Morning</span><small>Reaches campus</small></div>
+                        <div class="trip-list" id="trips-morning"></div>
+                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="morning">+ Add bus</button>
+                    </div>
+                    <div class="sched-edit-col">
+                        <div class="sched-edit-head"><span>Afternoon</span><small>Leaves campus</small></div>
+                        <div class="trip-list" id="trips-afternoon"></div>
+                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="afternoon">+ Add bus</button>
+                    </div>
+                </div>
+                <div class="modal-actions sched-edit-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="schedule-copy-all">Copy this day to all days</button>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-schedule')">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- ================= Driver modal ================= -->
@@ -451,7 +529,7 @@
 
     <div id="admin-toast" role="status" aria-live="polite"></div>
 
-    <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_bus_seats": default_bus_seats} | tojson }}</script>
+    <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_bus_seats": default_bus_seats, "schedules": schedules, "day_names": day_names, "today": today} | tojson }}</script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>
 </html>
