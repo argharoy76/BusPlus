@@ -491,3 +491,27 @@
     .sched-edit-grid { grid-template-columns: 1fr; }
     .week-col { padding-left: 4px !important; padding-right: 4px !important; }
 }
+
+/* ---- Live map tab ---- */
+.live-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 1rem; align-items: start; }
+.live-map { height: calc(100vh - 190px); min-height: 420px; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; }
+.live-list { max-height: calc(100vh - 190px); overflow-y: auto; }
+.live-list td { font-size: 0.85rem; }
+.live-bus { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #0f172a; cursor: pointer; }
+.live-bus .bus-color-dot { width: 14px; height: 14px; font-size: 0; }
+.live-stale td { opacity: 0.55; }
+@media (max-width: 1100px) {
+    .live-layout { grid-template-columns: 1fr; }
+    .live-map { height: 60vh; }
+}
+
+/* ---- Background GPS pop-up ---- */
+.tracker-intro, .tracker-note { font-size: 0.86rem; color: #475569; margin: 0 0 0.75rem; line-height: 1.5; }
+.tracker-note { margin-top: 0.75rem; font-size: 0.8rem; }
+.tracker-steps { margin: 0; padding-left: 1.2rem; font-size: 0.88rem; color: #0f172a; display: grid; gap: 0.6rem; }
+.tracker-field { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+.tracker-field span { font-size: 0.78rem; font-weight: 700; color: #64748b; }
+.tracker-field code {
+    font-size: 0.85rem; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 0.45rem 0.6rem; overflow-wrap: anywhere; user-select: all;
+}

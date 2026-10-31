@@ -7,6 +7,7 @@ API:    /api/admin/drivers   add / edit / unlock / delete drivers
         /api/admin/routes    add / edit / delete routes
         /api/admin/schedules each route's bus schedule
         /api/admin/road-path snap a route to the roads (route editor)
+        /api/admin/drivers/<id>/tracker   background GPS settings for the Traccar Client app
 """
 
 import re
@@ -17,7 +18,7 @@ from config import Config
 from content import rules
 from content.words.bus_schedule import DAY_NAMES
 from controllers.helpers import fail, json_body, ok
-from services import schedule_service, store, tracking, users
+from services import schedule_service, store, trackers, tracking, users
 from services.road_router import RoadRouterError, road_path
 from services.tracking_service import BUS_COLOR_PALETTE
 from services.words import say
@@ -63,6 +64,7 @@ def portal():
         today=schedule_service.today_key(),
         default_bus_seats=rules.DEFAULT_BUS_SEATS,
         max_bus_seats=rules.MAX_BUS_SEATS,
+        map_center=Config.UNIVERSITY_LOCATION,
     )
 
 
@@ -136,7 +138,22 @@ def delete_driver(driver_id: str):
     if not users.delete_driver(driver_id):
         return fail(say("Driver {id} not found.", id=driver_id), 404)
     tracking.show_driver_on_bus(driver_id, None, None)
+    trackers.forget(driver_id)
     return ok(message=say("Driver {id} deleted.", id=driver_id))
+
+
+@admin_bp.post("/api/admin/drivers/<driver_id>/tracker")
+def driver_tracker(driver_id: str):
+    """
+    The settings a driver types into the Traccar Client app for background GPS:
+    server URL and their secret key. Body {"renew": true} makes a new key (the old one stops).
+    """
+    if users.get_driver(driver_id) is None:
+        return fail(say("Driver {id} not found.", id=driver_id), 404)
+    renew = bool(json_body().get("renew"))
+    key = trackers.key_for(driver_id, renew=renew)
+    return ok(key=key, server_url=url_for("tracker.receive_position", _external=True),
+              message=say("New key made. The old one no longer works.") if renew else None)
 
 
 # ---------------------------------------------------------------------------

@@ -71,10 +71,13 @@ class BottomSheet {
             }
         }, true);
 
-        window.addEventListener("resize", () => {
+        // Re-measure when the screen changes size (rotation, the browser's bars showing / hiding)
+        const onResize = () => {
             this.measure();
             this.setVisible(this.snaps[this.snap], false);
-        });
+        };
+        window.addEventListener("resize", onResize);
+        window.visualViewport?.addEventListener("resize", onResize);
     }
 
     /** Works out the three resting heights (px of sheet visible) for the current screen and content. */
@@ -87,7 +90,8 @@ class BottomSheet {
         if (!this.forceFull && this.content) {
             const last = this.content.lastElementChild;
             const contentEnd = last ? last.offsetTop + last.offsetHeight : this.content.offsetTop;
-            needed = Math.round(contentEnd + 20);
+            const bottomRoom = parseFloat(getComputedStyle(this.content).paddingBottom) || 24;   // includes the phone's safe area
+            needed = Math.round(contentEnd + bottomRoom + 4);
         }
         const full = Math.max(peek, Math.min(H, needed));
         const half = Math.min(full, Math.max(peek + 120, Math.round(window.innerHeight * 0.5)));
@@ -310,7 +314,6 @@ class StudentTracker {
         this.sheet = null;
         this.lastSheetSignature = "";
         this.lastShownRoutes = null;
-        this.streamLive = false;
         this.lastArrivalCheck = 0;
 
         this.sheetEl = document.getElementById("bus-sheet");
@@ -732,16 +735,11 @@ class StudentTracker {
      * If it drops, the browser reconnects by itself and the 3-second poll fills in meanwhile.
      */
     startLiveStream() {
-        if (!window.EventSource) return;
-        const es = new EventSource(`/api/buses/stream?audience=${this.audience}`);
-        es.onopen = () => { this.streamLive = true; };
-        es.onerror = () => { this.streamLive = false; };
-        es.onmessage = (e) => {
-            try {
-                const data = JSON.parse(e.data);
-                if (!Array.isArray(data.buses)) return;
-                this.streamLive = true;
-                this.latestBuses = data.buses;
+        this.feed = new BusFeed({
+            audience: this.audience,
+            pollMs: window.APP_CONFIG?.refreshMs || 3000,
+            onUpdate: (buses) => {
+                this.latestBuses = buses;
                 this.refreshMapBuses();
                 this.renderSheet();
                 // Arrival time to Home: refresh at most every 1.5 s
@@ -750,22 +748,13 @@ class StudentTracker {
                     this.lastArrivalCheck = now;
                     this.checkArrival();
                 }
-            } catch (err) { /* ignore a bad message */ }
-        };
+            }
+        }).start();
     }
 
-    /** Poll: fetches the buses when the live stream is down, then checks the Home arrival. */
+    /** Checks the Home arrival (the bus positions themselves come from the live feed). */
     async fetchLiveTrackingData() {
         try {
-            if (!this.streamLive) {
-                const resp = await fetch(`/api/buses?audience=${this.audience}`);
-                const data = await resp.json();
-                if (data.success && data.buses) {
-                    this.latestBuses = data.buses;
-                    this.refreshMapBuses();
-                    this.renderSheet();
-                }
-            }
             await this.checkArrival();
         } catch (err) {
             // network blip: try again on the next tick

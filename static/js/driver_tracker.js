@@ -25,13 +25,11 @@ class DriverApp {
         this.online = this.readSetting("busplus_driver_online", "1") === "1";   // driver's Online/Offline switch
         this.pendingFix = null;      // newest GPS fix waiting while the previous one is still being sent
         this.pendingTimer = null;
-        this.streamLive = false;
         this.follow = true;          // keep the own bus in view until the driver pans the map
         this.watchId = null;
         this.lastSent = { t: 0, lat: null, lng: null };
         this.sending = false;
         this.wakeLock = null;
-        this.pollTimer = null;
         this.dutyTimer = null;
         this.duty = null;
         this.firstFit = true;
@@ -98,10 +96,8 @@ class DriverApp {
         if (this.online) this.startGps();
         else this.goOffline({ quiet: true });
         this.loadDuty();
-        this.refreshBuses();
         this.startLiveStream();
         // Fallback only: while the live stream is connected, updates arrive instantly
-        this.pollTimer = setInterval(() => { if (!this.streamLive) this.refreshBuses(); }, window.APP_CONFIG?.refreshMs || 3000);
         this.dutyTimer = setInterval(() => this.loadDuty(), 60000);
 
         document.addEventListener("visibilitychange", () => {
@@ -222,27 +218,18 @@ class DriverApp {
 
     /** Live bus feed pushed by the server (the 3-second poll only runs while it is down). */
     startLiveStream() {
-        if (!window.EventSource) return;
-        const es = new EventSource("/api/buses/stream");
-        es.onopen = () => { this.streamLive = true; };
-        es.onerror = () => { this.streamLive = false; };
-        es.onmessage = (e) => {
-            try {
-                const data = JSON.parse(e.data);
-                if (Array.isArray(data.buses)) { this.streamLive = true; this.handleBuses(data.buses); }
-            } catch (err) { /* ignore a bad message */ }
-        };
-    }
+        this.feed = new BusFeed({
+            pollMs: window.APP_CONFIG?.refreshMs || 3000,
+            onUpdate: (buses) => this.handleBuses(buses)
+        }).start();
 
-    /** Fetches the bus list once (used while the live feed is down). */
-    async refreshBuses() {
-        try {
-            const resp = await fetch("/api/buses");
-            const data = await resp.json();
-            if (data.success) this.handleBuses(data.buses || []);
-        } catch (err) {
-            // network blip: try again on the next tick
-        }
+        // "Your bus": the map follows the bus marker smoothly, frame by frame
+        window.googleMapsHelper.onFrame = (busId, pos) => {
+            if (busId !== this.bus.bus_id || this.view !== "mine" || !this.follow || this.firstFit) return;
+            const map = window.googleMapsHelper.leafletMap;
+            const centre = map.latLngToContainerPoint(map.getCenter());
+            if (centre.distanceTo(map.latLngToContainerPoint(pos)) > 1) map.panTo(pos, { animate: false });
+        };
     }
 
     /** New bus list from the stream or the poll: redraw, and re-fit if the admin moved this bus to another route. */
@@ -318,7 +305,7 @@ class DriverApp {
     /** New GPS fix from the phone: sends it to the server, at most about once a second. */
     onPosition(pos) {
         if (!this.online) return;
-        const { latitude, longitude, speed, heading } = pos.coords;
+        const { latitude, longitude, speed, heading, accuracy } = pos.coords;
         this.setGpsState("on", DT("GPS on · sharing location"));
         this.showBanner("");
 
@@ -328,7 +315,11 @@ class DriverApp {
             // Many phones don't report speed: send null and the server works it out from the movement
             speed_kmh: typeof speed === "number" && !Number.isNaN(speed) ? speed * 3.6 : null,
             // Only send a heading the phone actually knows; otherwise the server works it out
-            heading_deg: typeof heading === "number" && !Number.isNaN(heading) ? heading : null
+            heading_deg: typeof heading === "number" && !Number.isNaN(heading) ? heading : null,
+            // How exact this fix is (metres) and when the phone took it: the server uses both to
+            // tell a parked bus (GPS wobble) from a moving one (services/speedometer.py)
+            accuracy_m: typeof accuracy === "number" ? accuracy : null,
+            fix_time: pos.timestamp || Date.now()
         };
 
         // Send a fix at most every GPS_SEND_EVERY_SECONDS, sooner after GPS_SEND_AFTER_METERS
@@ -355,12 +346,11 @@ class DriverApp {
         this.pendingFix = null;
         this.post("/api/driver/location", fix).then(data => {
             if (data && data.bus) {
+                // Show our own new position straight away (the live feed brings the same a moment later)
                 this.bus = { ...this.bus, ...data.bus };
-                const idx = this.allBuses.findIndex(b => b.bus_id === data.bus.bus_id);
-                if (idx >= 0) this.allBuses[idx] = { ...this.allBuses[idx], ...data.bus };
-                else this.allBuses.push(data.bus);
+                this.feed?.merge(data.bus);
+                if (this.feed) this.allBuses = [...this.feed.buses.values()];
                 this.drawBuses();
-                this.followMyBus();
             }
             this.flushPending();
         });
@@ -369,13 +359,6 @@ class DriverApp {
     /** Sends the newest waiting GPS position once the last one is done. */
     flushPending() {
         if (this.pendingFix && !this.sending && this.online) this.sendFix(this.pendingFix);
-    }
-
-    /** Keeps the map centred on this driver's bus while following. */
-    followMyBus() {
-        if (this.view === "mine" && this.follow && this.bus.is_active && this.bus.current_latitude) {
-            window.googleMapsHelper.leafletMap?.panTo([this.bus.current_latitude, this.bus.current_longitude], { animate: true, duration: 0.8 });
-        }
     }
 
     // ------------------------------------------------------------------
@@ -539,7 +522,6 @@ class DriverApp {
     async logout() {
         if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
         this.watchId = null;
-        clearInterval(this.pollTimer);
         clearInterval(this.dutyTimer);
         try { await this.wakeLock?.release(); } catch (e) {}
         try {

@@ -20,8 +20,9 @@ CHANGE THE WEBSITE  ->  the content/ folder (no code needed; save, then refresh 
                     live map, a choice in the backend's Buses tab and an entry in its Users tab.
   map_settings.py   map centre + zoom, Map/Satellite/Traffic layers (tile URLs), final stop
                     (Hadi Chattar), default Home stop, time zone, country box
-  rules.py          PIN length, driver lock time, GPS send speed, map refresh, bus seats,
-                    test-drive speed, trail length, alert minutes, login limits
+  rules.py          PIN length, driver lock time, GPS send speed, speed filter (when a bus counts
+                    as stopped), map refresh, bus seats, test-drive speed, trail length,
+                    alert minutes, login limits
   starting_data.py  routes, buses, demo drivers and starting bus schedules for a new database
   words/            EVERY text on the site, one file per page: login_pages, rider_map, driver_map,
                     bus_schedule, map, backend_login, backend, server_messages.
@@ -36,9 +37,11 @@ CHANGE THE WEBSITE  ->  the content/ folder (no code needed; save, then refresh 
 HOW IT WORKS (one request, start to end)
   Phone/PC browser --> Flask (Python) --> services (logic) --> SQLite database / memory
   1. A driver's phone sends its GPS about once a second (POST /api/driver/location).
-  2. TrackingService stores the position in memory and wakes every open map.
-  3. Each map keeps one live connection (GET /api/buses/stream, "Server-Sent Events")
-     and moves the bus marker within ~0.1 s. No page reload, no polling.
+  2. TrackingService cleans it (wobble filter, puts it on the road), stores it in memory
+     and wakes every open map.
+  3. Each map keeps one live connection (GET /api/buses/stream, "Server-Sent Events") and
+     gets only what changed. The bus glides along the road at its real speed, 60 frames a
+     second (google_maps_helper.js). No page reload, no polling.
 
 
 LIBRARIES (what each is used for)
@@ -85,6 +88,7 @@ FILES AND THEIR MAIN FUNCTIONS
     auth_controller    admin_login, driver_login, rider_login, logout, search_drivers
     bus_controller     list_buses, stream_buses (live feed), driver_location, start_trip,
                        stop_trip (online/offline), driver_assignment (today's duty card)
+    tracker_controller receive_position (background GPS from the Traccar Client app)
     route_controller   list_routes, list_schedules (Bus schedule pop-up), check_arrival (alert),
                        _best_bus_for_stop
     admin_controller   portal (/backend), create/update/delete driver, bus, route,
@@ -98,6 +102,9 @@ FILES AND THEIR MAIN FUNCTIONS
                        mark_duty_changed / mark_duty_seen
     notification_service  arrival_alert(): IDLE / PASSED / ARRIVED / CRITICAL / WARNING / INFO
     geo                distance_km, bearing_deg, estimate_eta, local_now
+    speedometer        Speedometer: precise speed from GPS (0 when parked, no marker wobble)
+    tracker_service    TrackerService: drivers' keys for the Traccar Client app, parse_fix()
+    route_geometry     RoutePath (snap to the road, distance along the route), AlongTrack (smoothing)
     road_router        road_path() via OSRM
     schedule_service   todays_schedules (riders/drivers see today only), all_timetables,
                        save_timetable, seed_timetables: one weekly timetable per route, set day by
@@ -125,6 +132,11 @@ FILES AND THEIR MAIN FUNCTIONS
     admin.js           backend tabs, forms, route editor map, day-by-day schedule editor
     schedule.js        BusSchedule: the "Bus schedule" pop-up (route, today's Morning/Afternoon buses)
   static/css/          common, landing, student (rider map), driver, admin
+
+BACKGROUND GPS FOR DRIVERS (screen off)
+  Web pages lose GPS when the phone's screen locks. Drivers install the free Traccar Client app;
+  in the backend: Drivers > Background GPS shows the Server URL and the driver's key to type in.
+  Code: controllers/tracker_controller.py, services/tracker_service.py. Details: README_SPECS.txt 3c.
 
 DATA
   Saved (SQLite): routes, buses, drivers (PIN hashed), bus schedules, students/teachers who signed in.

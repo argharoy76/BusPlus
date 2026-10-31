@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from config import Config
+from content import rules
 from models.records import BusRecord
 from models.rider_types import DEFAULT_RIDER_KEY, RIDER_KEYS
 
@@ -45,10 +46,15 @@ class Bus:
     current_stop_index: int = 0          # index of the next stop on the route
     next_stop_name: str = ""
     last_update_ts: float = 0.0          # Unix time of the last GPS update
+    sample_t: float = 0.0                # when the shown position was measured (server clock, seconds)
+    progress_m: float | None = None      # metres along its route (None: off the route / unknown)
 
     def move_to(self, latitude: float, longitude: float, speed_kmh: float | None,
-                heading_deg: float | None, trip_status: str) -> None:
+                heading_deg: float | None, trip_status: str, sample_t: float | None = None,
+                progress_m: float | None = None) -> None:
         """Record a new GPS position. Missing speed/heading keep their previous values."""
+        self.sample_t = sample_t if sample_t is not None else time.time()
+        self.progress_m = round(progress_m, 1) if progress_m is not None else None
         self.current_latitude = float(latitude)
         self.current_longitude = float(longitude)
         if speed_kmh is not None:
@@ -58,6 +64,30 @@ class Bus:
         self.trip_status = trip_status
         self.is_active = True
         self.last_update_ts = time.time()
+
+    def shown_speed(self) -> float:
+        """Speed for the maps: 0 when the phone has sent nothing for a while (content/rules.py)."""
+        if self.is_active and time.time() - self.last_update_ts > rules.SPEED_STALE_SECONDS:
+            return 0.0
+        return round(self.speed_kmh, 1)
+
+    def live_dict(self) -> dict:
+        """Only what changes while a bus drives (sent to open maps many times a second, so kept small)."""
+        return {
+            "bus_id": self.bus_id,
+            "is_active": self.is_active,
+            "is_simulating": self.is_simulating,
+            "current_latitude": round(self.current_latitude, 7),
+            "current_longitude": round(self.current_longitude, 7),
+            "speed_kmh": self.shown_speed(),
+            "heading_deg": round(self.heading_deg, 1),
+            "trip_status": self.trip_status,
+            "current_stop_index": self.current_stop_index,
+            "next_stop_name": self.next_stop_name,
+            "sample_t": round(self.sample_t, 3),
+            "progress_m": self.progress_m,
+            "last_update_ts": round(self.last_update_ts, 1),
+        }
 
     def to_dict(self) -> dict:
         """JSON form sent to the browser (no private driver details such as phone numbers)."""
@@ -74,13 +104,16 @@ class Bus:
             "driver_name": self.driver_name,
             "current_latitude": self.current_latitude,
             "current_longitude": self.current_longitude,
-            "speed_kmh": round(self.speed_kmh, 1),
+            "speed_kmh": self.shown_speed(),
             "heading_deg": self.heading_deg,
             "is_active": self.is_active,
             "is_simulating": self.is_simulating,
             "trip_status": self.trip_status,
             "current_stop_index": self.current_stop_index,
             "next_stop_name": self.next_stop_name,
+            "sample_t": round(self.sample_t, 3),
+            "progress_m": self.progress_m,
+            "last_update_ts": round(self.last_update_ts, 1),
             "last_updated_iso": (datetime.fromtimestamp(self.last_update_ts, UTC).isoformat()
                                  if self.last_update_ts else None),
         }

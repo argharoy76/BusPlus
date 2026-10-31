@@ -56,15 +56,74 @@ PART 1. FEATURES
                stop_trip(), _update_next_stop(), _add_trail_point()
    Settings  : content/rules.py (GPS_SEND_EVERY_SECONDS, GPS_SEND_AFTER_METERS)
 
-4. LIVE MAP UPDATES (no reload, about 0.1 s)
-   Every open map keeps one connection; the server pushes the bus list when anything changes.
-   Libraries : Server-Sent Events (browser EventSource), threading.Condition (Python),
-               gevent (lets one gunicorn process hold thousands of open connections)
+3b. PRECISE SPEED (0 km/h when the bus stands still)
+   A parked phone's GPS wobbles a few metres every second; dividing that by one second used to
+   show 4-15 km/h. Now the phone sends each fix with its accuracy and time, and the server:
+     - ignores fixes less exact than GPS_IGNORE_ACCURACY_M,
+     - fits a straight line through the last SPEED_WINDOW_SECONDS of fixes (least squares),
+       so the wobble averages out and only the real movement is left,
+     - shows 0 km/h and keeps the marker still while that movement stays inside the wobble
+       circle (SPEED_STOPPED_RADIUS_M, or 1.5 x the GPS accuracy); two moving fixes in a row
+       are needed to start again,
+     - uses the phone's own Doppler speed while moving (most exact), else the fitted speed,
+     - shows speeds under SPEED_MIN_KMH as 0, smooths the number, and shows 0 when the phone
+       has sent nothing for SPEED_STALE_SECONDS.
+   Libraries : Python statistics + math (least-squares fit), Geolocation API (coords.speed,
+               coords.accuracy, position.timestamp)
+   Functions : services/speedometer.py: Speedometer.update(), _velocity(), _fix_time()
+               tracking_service.py: update_location(), _speedometer(); models/bus.py: Bus.shown_speed()
+               driver_tracker.js: DriverApp.onPosition() (sends accuracy_m and fix_time)
+   Settings  : content/rules.py (SPEED_STOPPED_RADIUS_M, SPEED_WINDOW_SECONDS, SPEED_MIN_KMH,
+               GPS_IGNORE_ACCURACY_M, SPEED_STALE_SECONDS)
+   Check     : tests/test_speed.py
+
+3c. BACKGROUND GPS (screen off) WITH THE TRACCAR CLIENT APP
+   Phones pause GPS in web pages when the screen locks. The free Traccar Client app (Android /
+   iPhone) keeps sending in the background and stores positions while offline. The admin opens
+   Drivers > "Background GPS" for a driver: it shows the Server URL (https://<site>/api/tracker)
+   and the driver's secret Device identifier to type into the app. Each position then moves the
+   driver's bus like the driver page does; the bus goes online with the first position and goes
+   offline by itself after AUTO_OFFLINE_MINUTES without GPS.
+   Libraries : Traccar Client app (OsmAnd protocol, query style or JSON), Flask-Limiter, secrets
+   Functions : controllers/tracker_controller.py: receive_position()
+               services/tracker_service.py: TrackerService.key_for(), driver_for(), forget(), load();
+               parse_fix() (both request styles), _timestamp()
+               admin_controller.py: driver_tracker(); admin.js: openTrackerModal(), renewTrackerKey(),
+               copyTracker(); tracking_service.py: start_auto_offline()
+               models/records.py: TrackerKeyRecord (table tracker_keys)
+   Settings  : content/rules.py (AUTO_OFFLINE_MINUTES, TRACKER_LIMIT), content/words/backend.py
+   Check     : tests/test_tracker.py
+
+3d. BACKEND LIVE MAP
+   Backend > "Live map": every online bus moving live (same smooth map as the riders'), with a
+   table of speed, next stop and how old each bus's GPS is (greyed after 30 s).
+   Functions : admin.js: startLiveMap(), renderLiveList(); google_maps_helper.js: BusFeed, GoogleMapsHelper
+               templates/admin_dashboard.html (tab-live); admin_controller.portal() (map_center)
+
+4. LIVE MAP UPDATES (smooth, about real time)
+   Server side: every open map keeps one connection. The first message has every bus
+   ("snapshot"); after that only what moved ("delta": position, speed, distance along the
+   route, time measured, new trail points - a few hundred bytes). Each message is turned into
+   JSON once and shared by all open maps. A ping every 15 s keeps the line open.
+   On the way in, each GPS fix is: timed on the server clock, filtered (feature 3b), put on the
+   road when within ROUTE_SNAP_METERS, and its distance along the route smoothed.
+   Browser side: each frame (60 per second) the bus's position NOW is predicted from its last
+   fix, moving on along the road at its speed (max 2 s); the marker moves with the bus and
+   works off any difference gently, so it glides around corners instead of jumping.
+   Libraries : Server-Sent Events (EventSource), threading.Condition, gevent, requestAnimationFrame,
+               Leaflet (setLatLng / addLatLng)
    Functions : bus_controller.py: stream_buses(), list_buses()
-               tracking_service.py: _bump(), wait_for_change(), get_version(), all_buses()
-               student_tracker.js: StudentTracker.startLiveStream(), fetchLiveTrackingData()
-               driver_tracker.js: DriverApp.startLiveStream(), refreshBuses(), handleBuses()
-   Settings  : content/rules.py (MAP_REFRESH_SECONDS = fallback poll when the stream is down)
+               tracking_service.py: update_location(), _sample_time(), _route_path(), _bump(),
+               feed_message(), wait_for_change()
+               services/route_geometry.py: RoutePath.project(), point_at(), between(); AlongTrack.update()
+               google_maps_helper.js: BusFeed (connect, apply, poll, merge), RoadLine.pointAt(),
+               GoogleMapsHelper.track(), targetOf(), startAnimation(), drawFrame(), noteServerTime()
+               student_tracker.js / driver_tracker.js: startLiveStream() (driver: map follows the bus)
+   Settings  : content/rules.py (ROUTE_SNAP_METERS, MAP_REFRESH_SECONDS = fallback when the stream is down)
+   Check     : tests/test_live.py
+   Note      : phones stop GPS in web pages while the screen is off or the browser is in the
+               background - the driver must keep BusPlus open on screen (it keeps the screen awake).
+               Such a bus turns grey on the maps after 30 s without GPS.
 
 5. THE MAP: TILES, BUS MARKERS, ROUTE LINES, RED TRAILS
    Libraries : Leaflet 1.9.4 (static/vendor/leaflet), Google Maps tile servers (pictures)
@@ -72,8 +131,11 @@ PART 1. FEATURES
                switchLayer(), updateActiveBuses(), updateBusMarker(), glideMarker() (smooth
                movement), busPopupHtml(), updateTrails(), drawRoutes(), showRoutes(), fitToPoints()
                models/route_paths.py (built-in road lines), tracking_service.py: _bus_dict() (adds trail)
+   Trail gaps: a jump longer than TRAIL_FILL_GAP_METERS (phone locked, no signal) is filled along the
+               route line (tracking_service.py: _add_trail_point()), or off the route by the road router
+               in the background (_fill_gap_by_road()) - never a straight line across.
    Settings  : content/map_settings.py (MAP_CENTER, MAP_START_ZOOM, MAP_LAYERS, MAP_CREDIT),
-               content/colors.py (THEME "bus_trail"), content/rules.py (TRAIL_MIN_STEP_KM, TRAIL_MAX_POINTS),
+               content/colors.py (THEME "bus_trail"), content/rules.py (TRAIL_MIN_STEP_KM, TRAIL_MAX_POINTS, TRAIL_FILL_GAP_METERS),
                content/words/map.py
 
 6. STUDENT / TEACHER MAP: CHOOSE A ROUTE OR A BUS
@@ -232,7 +294,8 @@ PYTHON (requirements.txt)
   pytest, ruff ......... tests (tests/) and code style checks (requirements-dev.txt, pyproject.toml).
 
 PYTHON STANDARD LIBRARY
-  math ......... haversine distance, bearing (services/geo.py)
+  math ......... haversine distance, bearing (services/geo.py), speed fit (services/speedometer.py)
+  statistics ... average / median of recent GPS fixes (services/speedometer.py)
   difflib ...... forgiving stop-name matching (models/route.py: get_stop_by_name())
   threading .... live-feed signal (Condition) and test drives (tracking_service.py)
   secrets ...... random session tokens and secret keys (user_service.py, config.py)
@@ -270,6 +333,7 @@ PAGES
   GET  /backend/logout            auth_controller.admin_logout()
   GET  /favicon.svg               view_controller.favicon()           browser-tab icon
   GET  /health                    view_controller.health()            "is it running?" check
+  GET/POST /api/tracker           tracker_controller.receive_position()  background GPS (Traccar Client)
 
 SIGN-IN API
   POST /api/auth/admin/login      auth_controller.admin_login()
@@ -300,6 +364,7 @@ BACKEND API (admin only)
   POST/PUT/DELETE /api/admin/routes[/<id>]       create_route(), update_route(), delete_route()
   POST            /api/admin/road-path           snap_to_roads()
   PUT             /api/admin/schedules/<route>   save_schedule()
+  POST            /api/admin/drivers/<id>/tracker driver_tracker()  (Traccar Client settings / new key)
 
 
 ======================================================================
@@ -322,6 +387,7 @@ PART 4. THE CONTENT FOLDER - WHERE EACH SETTING IS USED
                      GPS_* , MAP_REFRESH_SECONDS -> APP_CONFIG -> driver_tracker.js, student_tracker.js
                      DEFAULT_BUS_SEATS, MAX_BUS_SEATS, TEST_DRIVE_SPEED, TRAIL_* -> tracking_service.py
                      DEFAULT_ALERT_MINUTES, MAX_ALERT_MINUTES -> rider map;  *_LOGIN_LIMIT -> auth_controller.py
+                     SPEED_*, GPS_IGNORE_ACCURACY_M -> services/speedometer.py, models/bus.py
   starting_data.py   ROUTES, BUSES, DEMO_DRIVERS, SCHEDULES -> models/seed_data.py, schedule_service.py
                      (only when the database is new / empty)
   words/*.py         WORDS -> services/words.py -> templates ({{ t(...) }}), JavaScript (window.WORDS),
@@ -366,6 +432,7 @@ controllers/admin_controller.py  -  The backend admin panel (/backend). Only the
     update_driver()  [PUT /api/admin/drivers/<driver_id>] Edit a driver; also moves their name onto their (new) bus.
     unlock_driver()  [POST /api/admin/drivers/<driver_id>/unlock] Free a driver account that is stuck on another phone.
     delete_driver()  [DELETE /api/admin/drivers/<driver_id>] Remove a driver and take their name off their bus.
+    driver_tracker()  [POST /api/admin/drivers/<driver_id>/tracker] The settings a driver types into the Traccar Client app for background GPS: server URL and their secret key. Body {"renew": true} makes a new key …
     create_bus()  [POST /api/admin/buses] Add a bus. Body: {bus_number, bus_name?, license_plate?, assigned_route_id, capacity?, color_hex?, audience?}.
     update_bus()  [PUT /api/admin/buses/<bus_id>] Edit a bus, or send it on another route today. Its drivers then see "Changed today".
     delete_bus()  [DELETE /api/admin/buses/<bus_id>] Delete a bus. Not allowed while it is on a live trip or still has a driver.
@@ -387,8 +454,9 @@ controllers/auth_controller.py  -  Sign-in and sign-out for everyone.
 
 controllers/bus_controller.py  -  Live buses: the public bus feed for maps, and the driver's phone API.
     list_buses()  [GET /api/buses] Every bus (or only student / teacher buses) with live position, route and trail.
-    stream_buses()  [GET /api/buses/stream] Live bus feed (Server-Sent Events). The browser's EventSource keeps this open; every time any bus changes the full list is pushed at once.
-    driver_location()  [POST /api/driver/location] GPS position from the driver's phone: {"latitude", "longitude", "speed_kmh"?, "heading_deg"?}.
+    stream_buses()  [GET /api/buses/stream] Live bus feed (Server-Sent Events). The browser's EventSource keeps this open. First message: every bus ("snapshot"). After that only what moved …
+    driver_location()  [POST /api/driver/location] GPS position from the driver's phone: {"latitude", "longitude", "speed_kmh"?, "heading_deg"?, "accuracy_m"?, "fix_time"? (ms since 1970)}.
+    _seconds()  Phone time in milliseconds -> seconds (None stays None).
     start_trip()  [POST /api/driver/trip/start] The driver switched to Online.
     stop_trip()  [POST /api/driver/trip/stop] The driver switched to Offline: the bus disappears from every map.
     driver_assignment()  [GET /api/driver/assignment] Today's duty for the driver's bus-icon menu: which bus, which route, where it starts, and whether the admin changed it today (shown until the driver …
@@ -408,6 +476,9 @@ controllers/route_controller.py  -  Routes and arrival alerts for the students' 
     list_schedules()  [GET /api/schedules] TODAY's timetable of every route for the "Bus schedule" pop-up: morning buses with the time they reach the campus, afternoon buses with the time …
     check_arrival()  [GET /api/notification/check] Arrival check for the rider's home stop.
     _best_bus_for_stop()  Which bus to watch when the rider hasn't picked one: the live bus on the route that is still coming to the stop and nearest to it; if none is live, …
+
+controllers/tracker_controller.py  -  Background GPS from the Traccar Client app (see services/tracker_service.py).
+    receive_position()  [GET/POST /api/tracker] One GPS position from Traccar Client: moves the driver's bus like the driver page does.
 
 controllers/view_controller.py  -  The front-end pages (HTML).
     landing()  [GET /] Start page: the Driver button and one button per rider type (content/user_types.py).
@@ -436,6 +507,19 @@ services/road_router.py  -  Snap a route to real roads for the admin's route edi
     class RoadRouterError  The road router could not be reached or found no route.
     road_path()  Driving line through `points` ([(lat, lng), ...]).
 
+services/route_geometry.py  -  Route geometry: keep live buses on their road and measure how far along it they are.
+    class Projection  Where a GPS point lands on the route.
+    class RoutePath  A route's road line, ready for measuring along.
+        .project()  Nearest point on the road to (lat, lng). With `near_m` (where the bus was last time), segments around it are tried first, so a road used twice (out …
+        ._closest()  
+        .point_at()  (lat, lng, road direction in degrees) at `progress_m` metres along the route.
+        .between()  Road points strictly between two distances along the route (in travel order).
+    class AlongTrack  Smoothed distance along the route (metres) and speed along it (m/s, minus = driving backwards).
+        .reset()  
+        .update()  Add one measurement (metres along the route at time t) and return the smoothed position.
+    _metres()  
+    _bearing()  
+
 services/schedule_service.py  -  Bus schedules: one timetable per route, set day by day by the admin (Schedules tab).
     today_key()  Today's day key in Bangladesh time, e.g. "sat".
     _saved_days()  route_id -> its saved week {"sat": {"morning": [...], "afternoon": [...]}, ...}.
@@ -446,6 +530,17 @@ services/schedule_service.py  -  Bus schedules: one timetable per route, set day
     seed_timetables()  Add the starting timetables (content/starting_data.py) once, if there are none at all.
     _clean_trips()  Check one day's morning or afternoon trips: a known bus (or none) and a valid time. Sorted by time.
 
+services/speedometer.py  -  A steady, honest speed for each bus from the driver's phone GPS.
+    class Reading  What the filter decided for one GPS fix.
+    class Speedometer  The recent fixes of one bus and its current speed.
+        .reset()  Forget everything (a new trip starts).
+        .update()  Add one GPS fix and return the speed / position to show.
+        ._result()  Smooth the speed, move the shown position, and build the reading.
+    _clear()  True when the phone itself clearly reports driving speed.
+    _clean_speed()  A speed inside 0..MAX_KMH (bad or missing values count as 0).
+    _velocity()  Least-squares velocity (north, east) in m/s through the fixes [(t, lat, lng, acc), ...].
+    _fix_time()  When the fix was taken, in seconds. The phone's own GPS time is best (network delays don't distort it); it is used when it is close to the server's …
+
 services/store.py  -  Small helpers for saving to and reading from the database.
     utc_now_iso()  Current UTC time as ISO-8601 text, the format all saved dates use.
     save()  Insert or update one row (matched by primary key) and commit.
@@ -454,6 +549,17 @@ services/store.py  -  Small helpers for saving to and reading from the database.
     seed_defaults()  Fill an empty database with the built-in KU routes and buses (and, if asked, four demo drivers with PIN 1234). Does nothing if routes exist.
     record_rider()  Remember a student/teacher who opened the map (insert, or refresh name and last-seen time).
     list_riders()  Students and teachers, most recently seen first (for the admin's Users tab).
+
+services/tracker_service.py  -  Background GPS for drivers, with the free Traccar Client app (Android and iPhone).
+    class TrackerService  The drivers' tracker keys (one instance per process, kept in memory).
+        .load()  Read the keys from the database. Called once by create_app().
+        .key_for()  The driver's key; made on first use, or replaced when `renew` (the old one stops working).
+        .driver_for()  The driver_id a key belongs to (None for an unknown key).
+        .forget()  The driver was deleted: their key stops working.
+    parse_fix()  One position from Traccar Client, in either request style, as {"key", "latitude", "longitude", "speed_kmh", "heading_deg", "accuracy_m", …
+    _number()  
+    _positive()  
+    _timestamp()  Unix seconds / milliseconds or ISO text -> Unix seconds (None if unreadable).
 
 services/tracking_service.py  -  Routes, buses and live bus tracking.
     class TrackingService  All routes and buses, their live state, and the live-update signal (one instance per process).
@@ -473,14 +579,21 @@ services/tracking_service.py  -  Routes, buses and live bus tracking.
         .delete_bus()  Remove a bus. Refused (ValueError) while it is on a live trip.
         .show_driver_on_bus()  Show a driver on their bus (and on no other bus). bus_id=None just removes them.
         ._clean_bus_fields()  Check the bus form from the admin panel. Raises ValueError with a readable message.
-        .update_location()  Record a GPS position from the driver's phone (or a test drive).
+        .update_location()  Record a GPS position from the driver's phone (or a test drive). Returns the bus, or None.
+        ._speedometer()  The speed filter of one bus (created on first use).
+        ._forget_trip()  A new trip starts (or one ended): empty trail, fresh speed and road filters.
+        ._sample_time()  When a fix was taken, on the server's clock. The phone's own fix times are exact but its clock may be a little off, so they are shifted by the …
+        ._route_path()  The measurable road line of a route (rebuilt when the admin changes the route).
         .start_trip()  Driver went online: the bus shows on the maps from its next GPS position.
+        .start_auto_offline()  Background check, every 30 s: a live bus with no GPS for AUTO_OFFLINE_MINUTES goes offline (its phone app was switched off, the battery died ...). …
         .stop_trip()  Driver went offline (or logged out): hide the bus, clear its trail, end any test drive.
         ._update_next_stop()  Work out which stop the bus is heading for (the nearest one, or the one after it if already there).
         ._park_at_route_start()  Place an idle bus at the first point of its route.
         ._bus_dict()  A bus as JSON, with its route's name/colour and (while live) its trail.
-        ._add_trail_point()  Add a GPS point to the red trail behind a bus (skips tiny GPS wobbles, keeps the newest points).
-        ._bump()  Note that something changed and wake every waiting live stream (lock must be held).
+        ._add_trail_point()  Grow the red trail behind a bus; returns the points added (sent to the open maps). Tiny GPS wobbles are skipped. A jump longer than …
+        ._fill_gap_by_road()  Off the route: ask the road router for the road between two trail points, in the background.
+        ._bump()  Note that something changed and wake every waiting live stream (lock must be held). bus_id: only this bus moved (trail_added = its new trail …
+        .feed_message()  What a live map that has seen `since_version` needs next: (new version, JSON text). {"type": "snapshot", "now", "trail_max", "buses": [every bus, …
         .get_version()  Current change counter (goes up by one on every bus or route change).
         .wait_for_change()  Block until something changes after `since_version` (or `timeout` seconds). Returns the new version.
         .start_simulation()  Start a background test drive from the route's start to Hadi Chattar. False if not possible.
@@ -527,6 +640,8 @@ models/__init__.py  -  BusPlus data models.
 models/bus.py  -  A bus: the details the admin sets up, plus where it is right now.
     class Bus  One bus: its setup (saved in the database) and its live state (memory only).
         .move_to()  Record a new GPS position. Missing speed/heading keep their previous values.
+        .shown_speed()  Speed for the maps: 0 when the phone has sent nothing for a while (content/rules.py).
+        .live_dict()  Only what changes while a bus drives (sent to open maps many times a second, so kept small).
         .to_dict()  JSON form sent to the browser (no private driver details such as phone numbers).
         .from_record()  Build the in-memory bus from its database row (live state starts empty).
         .to_record()  Database row for this bus's setup (saved with `db.session.merge`).
@@ -537,6 +652,7 @@ models/records.py  -  Database tables (Flask-SQLAlchemy).
     class DriverRecord  A driver account created by the admin. The PIN is stored only as a hash.
     class RiderRecord  A student or teacher who has opened the live map (shown to the admin).
     class TimetableRecord  The bus timetable of one route, set day by day in the backend.
+    class TrackerKeyRecord  The secret "device identifier" a driver types into the Traccar Client app, so their phone can send its location in the background (screen off). See …
 
 models/rider_types.py  -  Rider types (Student, Teacher, ... ) as set in content/user_types.py, checked once at start-up.
     _check_rider_types()  Stop with a clear message if content/user_types.py has a mistake.
@@ -610,6 +726,11 @@ static/js/admin.js  -  Backend admin panel (/backend): drivers, routes (map edit
     updateDayCounts()  Small number on each day tab = how many buses that day (empty = no bus).
     showScheduleDay()  Shows one day of the week in the schedule form.
     openScheduleModal()  Opens a route's weekly schedule form.
+    startLiveMap()  Opens the Live map the first time its tab is shown: same smooth live buses as the riders' map.
+    renderLiveList()  The table next to the live map: each online bus, its speed, next stop and how old its GPS is.
+    openTrackerModal()  Shows the Traccar Client settings (server URL + secret key) for one driver.
+    renewTrackerKey()  Replaces the driver's key (after asking): the old key stops working at once.
+    copyTracker()  Copies the server URL or key to the clipboard.
 
 static/js/common.js  -  Shared by every page, loaded first
     fetch() wrapper  adds the CSRF token (X-CSRFToken header) to every POST / PUT / DELETE
@@ -628,7 +749,6 @@ static/js/driver_tracker.js  -  BusPlus driver page: full-screen map, GPS on aut
         shownRouteIds()  Route lines: only for routes with a bus online (your own route while you are online).
         drawBuses()  Puts the buses for the current view, their trails and route lines on the map.
         startLiveStream()  Live bus feed pushed by the server (the 3-second poll only runs while it is down).
-        refreshBuses()  Fetches the bus list once (used while the live feed is down).
         handleBuses()  New bus list from the stream or the poll: redraw, and re-fit if the admin moved this bus to another route.
         setGpsState()  Updates the GPS dot on the logo and the GPS line in the menu.
         showBanner()  Shows (or hides, with empty text) the red message at the bottom.
@@ -636,7 +756,6 @@ static/js/driver_tracker.js  -  BusPlus driver page: full-screen map, GPS on aut
         onPosition()  New GPS fix from the phone: sends it to the server, at most about once a second.
         sendFix()  Sends one GPS position to the server.
         flushPending()  Sends the newest waiting GPS position once the last one is done.
-        followMyBus()  Keeps the map centred on this driver's bus while following.
         renderOnline()  Shows the Online / Offline switch and title.
         setOnline()  The driver flipped the switch: start or stop sharing location.
         goOffline()  Stops sharing location; the bus disappears from students' maps.
@@ -652,6 +771,16 @@ static/js/driver_tracker.js  -  BusPlus driver page: full-screen map, GPS on aut
 static/js/google_maps_helper.js  -  BusPlus map helper, used by the rider map (student/teacher) and the driver map
     escapeHtml()  Makes text safe to put inside HTML (names, messages, anything from the server).
     googleTileUrl()  Google tile URL. lyrs: m = map, y = satellite with labels, "m,traffic" = map with live traffic.
+    class RoadLine  A route's road line that we can measure along (same maths as services/route_geometry.py), so a bus between two GPS fixes moves ALONG the road, …
+        pointAt()  {lat, lng, bearing} at `m` metres from the start of the route.
+    metresBetween()  
+    bearingBetween()  
+    turnBetween()  Shortest turn from angle a to angle b, in degrees (-180..180).
+    class BusFeed  The live bus feed for a map page. One EventSource connection: the server first sends every bus ("snapshot"), then only what moved ("delta": new …
+        start()  Opens the live connection and starts the fallback timer.
+        connect()  
+        poll()  
+        merge()  Adds what the page learnt another way (the driver's own location reply) to a known bus.
     class GoogleMapsHelper  Everything drawn on a map; one shared instance: window.googleMapsHelper.
         initMap()  Creates the map inside containerId. options: center {lat, lng}, zoom, layerSwitcher (Map / Satellite / Traffic buttons), attribution (small "Google …
         addLayerSwitcher()  Adds the floating Map / Satellite / Traffic buttons.
@@ -659,7 +788,14 @@ static/js/google_maps_helper.js  -  BusPlus map helper, used by the rider map (s
         updateActiveBuses()  Shows exactly these buses (live ones only): adds/moves their markers, removes all others.
         removeBusMarker()  Takes one bus marker off the map.
         updateBusMarker()  Adds or moves one bus marker: a circle in the bus's colour with a bus icon, a heading arrow that turns with the bus, and a speed tag underneath. A …
-        glideMarker()  Moves a marker smoothly to a new position (about one second), so live buses glide along instead of jumping between GPS fixes. Big jumps snap …
+        noteServerTime()  Learns the server's clock from a live message ("now"), to compare with sample times.
+        serverNow()  
+        isStale()  
+        track()  Adds a bus's latest live state as a sample for the animation.
+        targetOf()  Where the bus should be right now: its last sample, carried on along the road at its speed.
+        startAnimation()  
+        frame()  
+        drawFrame()  Moves one marker for this frame. The marker travels WITH the bus (the change of the predicted position since the last frame) and works off any …
         busPopupHtml()  Popup shown when a bus is tapped on the driver map.
         updateTrails()  Draws a red trail behind each given bus (bus.trail = [[lat, lng], ...]) and removes the rest. Each bus has its own trail, so buses that drove the …
         updateStudentLocationMarker()  Shows the rider's GPS position (blue pulsing dot + accuracy circle) and flies there.
@@ -680,6 +816,7 @@ static/js/schedule.js  -  "Bus schedule" pop-up (templates/_schedule_popup.html)
 static/js/student_tracker.js  -  BusPlus rider map (students and teachers; APP_DATA.audience says which)
     isWideScreen()  Screens this wide show the sheet as a fixed side panel (must match the @media rule in student.css).
     class BottomSheet  Google-Maps-style bottom sheet with three resting heights: peek (just the header), half (about half the screen) and full. Drag the handle/header, …
+        onResize()  
         measure()  Works out the three resting heights (px of sheet visible) for the current screen and content.
         setForceFull()  Lets the sheet open to the full screen height (while the route drop-down is open).
         setVisible()  Moves the sheet so px of it is visible; also tells the page (Locate Me button rides on top).
@@ -713,7 +850,7 @@ static/js/student_tracker.js  -  BusPlus rider map (students and teachers; APP_D
         setAlertFrequency()  Saves how often the alert repeats ("1", "2", "3" or "continuous"); called by the page's Repeat select.
         locateStudentGps()  "Locate Me": shows the rider's GPS position on the map.
         startLiveStream()  Live bus feed: the server pushes every change straight away (no waiting for the next poll). If it drops, the browser reconnects by itself and the …
-        fetchLiveTrackingData()  Poll: fetches the buses when the live stream is down, then checks the Home arrival.
+        fetchLiveTrackingData()  Checks the Home arrival (the bus positions themselves come from the live feed).
         checkArrival()  Asks the server how far the watched bus is from the Home stop; updates the Home line and alerts.
         getAlertStopName()  The stop alerts are about: the rider's Home stop.
         getAlertTarget()  Which route / bus to watch for the Home stop: - a selected bus: that bus (only if its route passes the Home stop) - otherwise the selected route if …
@@ -751,7 +888,7 @@ HTML TEMPLATES (templates/)
     _schedule_popup.html    the "Bus schedule" pop-up (included by both map pages)
     _theme.html             browser-tab icon and THEME colours as CSS variables (included in every page's <head>)
     _ui.html                logo() and icon() macros (logo emoji tile, line icons)
-    admin_dashboard.html    backend panel: Drivers, Routes, Buses, Schedules, Users tabs and their pop-up forms
+    admin_dashboard.html    backend panel: Live map, Drivers, Routes, Buses, Schedules, Users tabs and their pop-ups
     admin_login.html        backend sign-in page
     base.html               shared page frame: <head>, CSRF token, common.js, window.WORDS, common.css
     driver_dashboard.html   driver's map and menu (duty card, views, schedule, online switch)

@@ -53,6 +53,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    min-height: 100dvh;   /* phones: the visible height, without the browser's bars */
 }
 
 /* The page content fills the height left over (lets full-screen maps use height: 100%) */
@@ -266,7 +267,7 @@ body {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    transition: transform 0.4s ease;
+    /* turned every frame by google_maps_helper.js: no CSS transition */
 }
 
 .gmap-bus-heading-arrow {
@@ -434,4 +435,13 @@ body {
     stroke-width: 1.9;
     stroke-linecap: round;
     stroke-linejoin: round;
+}
+
+/* A live bus whose phone has sent nothing for a while (google_maps_helper.js: STALE_S) */
+.gmap-bus-container.is-stale {
+    filter: grayscale(1);
+    opacity: 0.55;
+}
+.gmap-bus-container.is-stale .gmap-bus-pulse-ring {
+    display: none;
 }

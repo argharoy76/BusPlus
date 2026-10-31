@@ -13,7 +13,6 @@ Driver's phone (signed-in driver only, always their own bus):
   POST /api/driver/assignment/seen   duty card was read
 """
 
-import json
 import time
 from datetime import datetime
 
@@ -28,21 +27,23 @@ from services.words import say
 bus_bp = Blueprint("buses", __name__)
 
 STREAM_KEEPALIVE_S = 15.0    # send a comment line this often so proxies keep the connection open
-STREAM_COALESCE_S = 0.25     # group rapid changes: at most ~4 pushes per second
+STREAM_COALESCE_S = 0.08     # group changes that arrive together (several buses at once)
 
 
 @bus_bp.get("/api/buses")
 def list_buses():
     """Every bus (or only student / teacher buses) with live position, route and trail."""
     buses = tracking.all_buses(audience_arg())
-    return ok(count=len(buses), buses=buses)
+    return ok(count=len(buses), buses=buses, now=time.time())
 
 
 @bus_bp.get("/api/buses/stream")
 def stream_buses():
     """
-    Live bus feed (Server-Sent Events). The browser's EventSource keeps this open;
-    every time any bus changes the full list is pushed at once.
+    Live bus feed (Server-Sent Events). The browser's EventSource keeps this open.
+    First message: every bus ("snapshot"). After that only what moved ("delta", a few
+    hundred bytes), pushed the moment a driver's phone sends a position.
+    See TrackingService.feed_message().
     """
     audience = audience_arg()
 
@@ -50,14 +51,16 @@ def stream_buses():
         yield "retry: 2000\n\n"                      # browser reconnects after 2 s if the line drops
         version = -1
         while True:
-            new_version = tracking.wait_for_change(version, timeout=STREAM_KEEPALIVE_S)
-            if new_version == version:
-                yield ": keep-alive\n\n"
+            new_version, message = tracking.feed_message(version, audience)
+            if new_version != version:
+                version = new_version
+                if message:
+                    yield f"data: {message}\n\n"
+                time.sleep(STREAM_COALESCE_S)
                 continue
-            version = new_version
-            payload = {"timestamp": time.time(), "buses": tracking.all_buses(audience)}
-            yield f"data: {json.dumps(payload)}\n\n"
-            time.sleep(STREAM_COALESCE_S)
+            if tracking.wait_for_change(version, timeout=STREAM_KEEPALIVE_S) == version:
+                # keep-alive: holds the line open through proxies, and syncs the map's clock
+                yield f'data: {{"type":"ping","now":{time.time():.3f}}}\n\n'
 
     return Response(stream_with_context(events()), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -69,7 +72,10 @@ def stream_buses():
 @bus_bp.post("/api/driver/location")
 @driver_required
 def driver_location(bus_id: str):
-    """GPS position from the driver's phone: {"latitude", "longitude", "speed_kmh"?, "heading_deg"?}."""
+    """
+    GPS position from the driver's phone:
+    {"latitude", "longitude", "speed_kmh"?, "heading_deg"?, "accuracy_m"?, "fix_time"? (ms since 1970)}.
+    """
     data = json_body()
     latitude, longitude = optional_float(data.get("latitude")), optional_float(data.get("longitude"))
     if latitude is None or longitude is None:
@@ -78,8 +84,15 @@ def driver_location(bus_id: str):
         return fail(say("Latitude/longitude out of range."))
     bus = tracking.update_location(bus_id, latitude, longitude,
                                    speed_kmh=optional_float(data.get("speed_kmh")),
-                                   heading_deg=optional_float(data.get("heading_deg")))
+                                   heading_deg=optional_float(data.get("heading_deg")),
+                                   accuracy_m=optional_float(data.get("accuracy_m")),
+                                   fix_time=_seconds(optional_float(data.get("fix_time"))))
     return ok(bus=bus)
+
+
+def _seconds(milliseconds: float | None) -> float | None:
+    """Phone time in milliseconds -> seconds (None stays None)."""
+    return milliseconds / 1000 if milliseconds is not None else None
 
 
 @bus_bp.post("/api/driver/trip/start")

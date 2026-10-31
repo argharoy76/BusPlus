@@ -32,6 +32,7 @@
                 </div>
 
                 <ul class="admin-nav-list">
+                    <li><div id="nav-live" class="admin-nav-item" onclick="switchTab('live')"><span>📍</span> {{ t("Live map") }}</div></li>
                     <li><div id="nav-drivers" class="admin-nav-item active" onclick="switchTab('drivers')"><span>👨‍✈️</span> {{ t("Drivers") }}</div></li>
                     <li><div id="nav-routes" class="admin-nav-item" onclick="switchTab('routes')"><span>🛣️</span> {{ t("Routes") }}</div></li>
                     <li><div id="nav-buses" class="admin-nav-item" onclick="switchTab('buses')"><span>🚌</span> {{ t("Buses") }}</div></li>
@@ -48,6 +49,25 @@
         </aside>
 
         <main class="admin-main">
+            <!-- ================= LIVE MAP ================= -->
+            <section id="tab-live" class="tab-section">
+                <div class="admin-header-row">
+                    <div class="admin-title">
+                        <h2>{{ t("Live map") }}</h2>
+                        <p>{{ t("Every bus that is online right now, moving live.") }}</p>
+                    </div>
+                </div>
+                <div class="live-layout">
+                    <div id="admin-live-map" class="live-map"></div>
+                    <div class="table-card live-list">
+                        <table class="admin-table">
+                            <thead><tr><th>{{ t("Bus") }}</th><th>{{ t("Speed") }}</th><th>{{ t("Next stop") }}</th><th>{{ t("Last GPS") }}</th></tr></thead>
+                            <tbody id="live-bus-rows"><tr><td colspan="4" class="muted">{{ t("No bus is online.") }}</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- ================= DRIVERS ================= -->
             <section id="tab-drivers" class="tab-section active">
                 <div class="admin-header-row">
@@ -111,6 +131,7 @@
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex; gap:0.4rem;">
                                         <button class="btn btn-secondary btn-sm" onclick='openDriverModal({{ driver | tojson }})'>{{ t("Edit") }}</button>
+                                        <button class="btn btn-secondary btn-sm" onclick='openTrackerModal({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})' title="{{ t("Send GPS with the screen off (Traccar Client app)") }}">{{ t("Background GPS") }}</button>
                                         {% if driver.is_logged_in %}
                                         <button class="btn btn-amber btn-sm" onclick='unlockDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>{{ t("Unlock") }}</button>
                                         {% endif %}
@@ -379,6 +400,31 @@
     </div>
 
     <!-- ================= Driver modal ================= -->
+    <!-- Background GPS: what the driver types into the Traccar Client app -->
+    <div id="modal-tracker" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h3 id="tracker-modal-title">{{ t("Background GPS") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-tracker')" aria-label="{{ t("Close") }}">✕</button>
+            </div>
+            <p class="tracker-intro">{{ t("A web page can only share GPS while it is open on the screen. With the free Traccar Client app the driver's phone keeps sending its location with the screen off or another app open.") }}</p>
+            <ol class="tracker-steps">
+                <li>{{ t("Install Traccar Client from the Play Store (Android) or App Store (iPhone).") }}</li>
+                <li>{{ t("Open it and enter these two settings:") }}
+                    <div class="tracker-field"><span>{{ t("Server URL") }}</span><code id="tracker-url"></code><button type="button" class="btn btn-secondary btn-sm" onclick="copyTracker('tracker-url')">{{ t("Copy") }}</button></div>
+                    <div class="tracker-field"><span>{{ t("Device identifier") }}</span><code id="tracker-key"></code><button type="button" class="btn btn-secondary btn-sm" onclick="copyTracker('tracker-key')">{{ t("Copy") }}</button></div>
+                </li>
+                <li>{{ t("Set Location accuracy to High, Frequency to 3 seconds, Distance to 0.") }}</li>
+                <li>{{ t("Allow location \"All the time\", turn off battery saving for the app, then switch Service status on.") }}</li>
+            </ol>
+            <p class="tracker-note">{{ t("The bus goes online with the first position and offline by itself when no GPS arrives for a few minutes. Keep the key secret: anyone with it can move this driver's bus.") }}</p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="renewTrackerKey()">{{ t("Make a new key") }}</button>
+                <button type="button" class="btn btn-primary" onclick="closeModal('modal-tracker')">{{ t("Done") }}</button>
+            </div>
+        </div>
+    </div>
+
     <div id="modal-driver" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-head">
@@ -530,7 +576,10 @@
     <div id="admin-toast" role="status" aria-live="polite"></div>
 
     <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_bus_seats": default_bus_seats, "schedules": schedules, "day_names": day_names, "today": today} | tojson }}</script>
-    <script>window.WORDS = Object.assign(window.WORDS || {}, {{ page_words("backend") | tojson }});</script>
+    <script>window.WORDS = Object.assign(window.WORDS || {}, {{ page_words("backend", "map") | tojson }});</script>
+    {# Live map tab: the same smooth live map as the riders' (content/map_settings.py) #}
+    <script>window.APP_CONFIG = Object.assign({ universityLocation: {{ map_center | tojson }} }, {{ map_config | tojson }});</script>
+    <script src="{{ url_for('static', filename='js/google_maps_helper.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>
 </html>

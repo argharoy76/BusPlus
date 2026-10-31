@@ -8,10 +8,12 @@ Note: because live bus data is kept in memory, run the app as ONE process
 (gunicorn.conf.py does this). Many open maps are still fine - gevent handles them.
 """
 
+from services.tracker_service import TrackerService
 from services.tracking_service import TrackingService
 from services.user_service import UserService
 
 tracking = TrackingService()
 users = UserService()
+trackers = TrackerService()
 
-__all__ = ["tracking", "users"]
+__all__ = ["trackers", "tracking", "users"]

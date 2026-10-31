@@ -90,3 +90,16 @@ class TimetableRecord(db.Model):
 
     route_id: Mapped[str] = mapped_column(String(20), primary_key=True)
     days: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class TrackerKeyRecord(db.Model):
+    """
+    The secret "device identifier" a driver types into the Traccar Client app, so their
+    phone can send its location in the background (screen off). See services/tracker_service.py.
+    """
+
+    __tablename__ = "tracker_keys"
+
+    driver_id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    key: Mapped[str] = mapped_column(String(40), unique=True)
+    created_at: Mapped[str] = mapped_column(String(40))

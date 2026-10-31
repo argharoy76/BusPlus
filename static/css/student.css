@@ -25,6 +25,14 @@ body {
     background-color: #e2e8f0;
 }
 
+/* The map fills exactly the visible screen. (100vh on phones is taller than what you see when
+   the browser's address bar / the phone's navigation bar is showing, which hid the bottom.) */
+.app-container,
+.app-main {
+    height: 100%;
+    min-height: 0;
+}
+
 button,
 input,
 select {
@@ -1022,7 +1030,8 @@ select {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    padding: 2px 12px calc(14px + env(safe-area-inset-bottom));
+    /* room under the last card so the phone's navigation bar / home line never covers it */
+    padding: 2px 12px calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 /* One bus in the list (a card) */

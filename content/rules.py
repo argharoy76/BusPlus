@@ -16,6 +16,35 @@ GPS_SEND_EVERY_SECONDS = 1
 # ... or sooner when the bus has moved this many metres.
 GPS_SEND_AFTER_METERS = 8
 
+# ---- Speed shown on the maps (services/speedometer.py) ------------------------
+# A parked phone's GPS still wobbles a few metres. The bus counts as STOPPED (speed 0,
+# marker stays still) while it moves less than this many metres (or its GPS accuracy, if larger)
+# over the last few seconds.
+SPEED_STOPPED_RADIUS_M = 10
+# How many seconds of GPS fixes are looked at to decide "stopped" and to measure speed.
+SPEED_WINDOW_SECONDS = 8
+# Slower than this (km/h) shows as 0.
+SPEED_MIN_KMH = 3
+# GPS fixes less exact than this (metres) are ignored (e.g. indoors, right after GPS starts).
+GPS_IGNORE_ACCURACY_M = 80
+# No GPS from a live bus for this many seconds: its speed shows as 0.
+SPEED_STALE_SECONDS = 15
+
+# ---- Background GPS (Traccar Client app, services/tracker_service.py) ---------
+# A live bus whose phone has sent no GPS for this many minutes goes offline by itself
+# (e.g. the driver switched the app off, or the phone died). 0 = never.
+AUTO_OFFLINE_MINUTES = 5
+# Positions per minute one phone (IP address) may send to /api/tracker.
+TRACKER_LIMIT = "240 per minute"
+
+# ---- Keeping buses on the road (services/route_geometry.py) -------------------
+# GPS this close (metres) to the bus's route line is put exactly on the road, so the bus
+# glides along the road instead of wobbling beside it. Further away = off its route: shown as is.
+ROUTE_SNAP_METERS = 35
+# When the red trail would jump further than this (metres) - e.g. the driver's phone was locked
+# for a minute - the gap is drawn along the road instead of a straight line.
+TRAIL_FILL_GAP_METERS = 40
+
 # If a map loses its live connection, it asks for the buses this often instead (seconds).
 MAP_REFRESH_SECONDS = 3
 

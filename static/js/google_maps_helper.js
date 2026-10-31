@@ -34,6 +34,131 @@ const CLEAN_MAP_STYLE = encodeURIComponent(
     "s.e:l.i|p.v:off"     // all POI icons
 );
 
+const M_PER_DEG = 111320;                  // metres per degree of latitude
+const EXTRAPOLATE_MAX_S = 2.0;             // keep a moving bus going this long after its last GPS fix
+const CORRECT_PER_S = 1.2;                 // how fast a position error is worked off (share per second)
+const STALE_S = 30;                        // no GPS for this long: the bus is shown greyed out
+
+/**
+ * A route's road line that we can measure along (same maths as services/route_geometry.py),
+ * so a bus between two GPS fixes moves ALONG the road, around corners, not straight across.
+ */
+class RoadLine {
+    constructor(points) {                  // [[lat, lng], ...]
+        this.pts = points;
+        this.cum = [0];
+        for (let i = 1; i < points.length; i++) {
+            this.cum.push(this.cum[i - 1] + metresBetween(points[i - 1], points[i]));
+        }
+        this.length = this.cum[this.cum.length - 1];
+    }
+
+    /** {lat, lng, bearing} at `m` metres from the start of the route. */
+    pointAt(m) {
+        const p = Math.max(0, Math.min(this.length, m));
+        let lo = 0, hi = this.cum.length - 1;
+        while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (this.cum[mid] <= p) lo = mid; else hi = mid; }
+        const a = this.pts[lo], b = this.pts[hi] || a;
+        const seg = this.cum[hi] - this.cum[lo];
+        const t = seg > 0 ? (p - this.cum[lo]) / seg : 0;
+        return { lat: a[0] + (b[0] - a[0]) * t, lng: a[1] + (b[1] - a[1]) * t, bearing: bearingBetween(a, b) };
+    }
+}
+
+function metresBetween(a, b) {
+    const kx = Math.cos((a[0] + b[0]) / 2 * Math.PI / 180);
+    return Math.hypot((b[0] - a[0]) * M_PER_DEG, (b[1] - a[1]) * M_PER_DEG * kx);
+}
+
+function bearingBetween(a, b) {
+    const kx = Math.cos((a[0] + b[0]) / 2 * Math.PI / 180);
+    return (Math.atan2((b[1] - a[1]) * kx, b[0] - a[0]) * 180 / Math.PI + 360) % 360;
+}
+
+/** Shortest turn from angle a to angle b, in degrees (-180..180). */
+const turnBetween = (a, b) => ((b - a + 540) % 360) - 180;
+
+/**
+ * The live bus feed for a map page. One EventSource connection: the server first sends every
+ * bus ("snapshot"), then only what moved ("delta": new position + new trail points). This class
+ * keeps the complete bus objects and calls onUpdate(buses) after every message.
+ * If the live connection is down (or silent for too long) it falls back to asking every few seconds.
+ */
+class BusFeed {
+    constructor({ audience = null, onUpdate = () => {}, pollMs = 3000 } = {}) {
+        this.query = audience ? `?audience=${encodeURIComponent(audience)}` : "";
+        this.onUpdate = onUpdate;
+        this.pollMs = pollMs;
+        this.buses = new Map();
+        this.trailMax = 1500;
+        this.live = false;
+        this.lastMessageAt = 0;
+    }
+
+    /** Opens the live connection and starts the fallback timer. */
+    start() {
+        this.poll();
+        this.connect();
+        setInterval(() => {
+            // The server sends at least a ping every 15 s: silence means a dead connection
+            if (this.live && Date.now() - this.lastMessageAt > 40000) this.connect();
+            if (!this.live) this.poll();
+        }, this.pollMs);
+        return this;
+    }
+
+    connect() {
+        if (!window.EventSource) return;
+        this.source?.close();
+        this.source = new EventSource(`/api/buses/stream${this.query}`);
+        this.source.onopen = () => { this.live = true; this.lastMessageAt = Date.now(); };
+        this.source.onerror = () => { this.live = false; };
+        this.source.onmessage = (e) => {
+            this.live = true;
+            this.lastMessageAt = Date.now();
+            try { this.apply(JSON.parse(e.data)); } catch (err) { /* ignore a bad message */ }
+        };
+    }
+
+    async poll() {
+        try {
+            const data = await (await fetch(`/api/buses${this.query}`)).json();
+            if (data.success) this.apply({ type: "snapshot", now: data.now, buses: data.buses || [] });
+        } catch (e) { /* offline for a moment */ }
+    }
+
+    /** Merges one message from the server into the bus list. */
+    apply(data) {
+        if (data.now) window.googleMapsHelper?.noteServerTime(data.now);
+        if (data.trail_max) this.trailMax = data.trail_max;
+        if (data.type === "ping") return;                       // keep-alive (every 15 s)
+        if (data.type === "delta") {
+            (data.buses || []).forEach(change => {
+                const bus = this.buses.get(change.bus_id);
+                if (!bus) return;                               // unknown bus: the next snapshot brings it
+                const added = change.trail_add || [];
+                delete change.trail_add;
+                Object.assign(bus, change);
+                if (added.length) {
+                    bus.trail = (bus.trail || []).concat(added);
+                    if (bus.trail.length > this.trailMax) bus.trail = bus.trail.slice(-this.trailMax);
+                }
+            });
+        } else {
+            this.buses = new Map((data.buses || []).map(b => [b.bus_id, b]));
+        }
+        this.onUpdate([...this.buses.values()], data.type);
+    }
+
+    /** Adds what the page learnt another way (the driver's own location reply) to a known bus. */
+    merge(change) {
+        const bus = this.buses.get(change?.bus_id);
+        if (!bus) return;
+        const { trail, ...rest } = change;
+        Object.assign(bus, rest);
+    }
+}
+
 /** Everything drawn on a map; one shared instance: window.googleMapsHelper. */
 class GoogleMapsHelper {
     constructor() {
@@ -46,6 +171,13 @@ class GoogleMapsHelper {
         this.busMarkers = {};      // bus_id -> marker
         this.polylines = {};       // route_id -> { glowLine, mainLine, points }
         this.trails = {};          // bus_id -> red line of where the bus has driven this trip
+        this.trailTips = {};       // bus_id -> short red line from the last trail point to the moving marker
+        this.trailDrawn = {};      // bus_id -> { first, count } of the trail points already drawn
+        this.tracks = {};          // bus_id -> recent GPS samples and where the marker is drawn now
+        this.roadLines = {};       // route_id -> RoadLine (for moving buses along the road)
+        this.clockOffset = null;   // server clock minus this browser's clock (seconds)
+        this.animating = false;
+        this.onFrame = null;       // optional: called (bus_id, [lat, lng]) every frame (driver map: follow)
         this.studentMarker = null;
         this.studentAccuracyCircle = null;
         this.homeMarker = null;
@@ -148,6 +280,7 @@ class GoogleMapsHelper {
     removeBusMarker(id) {
         this.busMarkers[id]?.remove();
         delete this.busMarkers[id];
+        delete this.tracks[id];
     }
 
     /**
@@ -170,17 +303,18 @@ class GoogleMapsHelper {
         const marker = this.busMarkers[id];
 
         if (marker) {
-            this.glideMarker(marker, latLng);
+            this.track(bus);
             const el = marker.getElement();
             if (el) {
-                el.querySelector(".gmap-bus-container")?.style.setProperty("--bus-color", color);
-                const headingEl = el.querySelector(".gmap-bus-heading");
-                if (headingEl) headingEl.style.transform = `rotate(${heading}deg)`;   // only the arrow turns
+                const box = el.querySelector(".gmap-bus-container");
+                box?.style.setProperty("--bus-color", color);
+                box?.classList.toggle("is-stale", this.isStale(bus));
                 const speedTag = el.querySelector(".gmap-bus-speed-tag");
-                if (speedTag) speedTag.textContent = MT("{speed} km/h", { speed });
+                const label = MT("{speed} km/h", { speed });
+                if (speedTag && speedTag.textContent !== label) speedTag.textContent = label;
             }
             // Keep an open popup (driver map) in step with the live data
-            if (marker.getPopup()) marker.setPopupContent(this.busPopupHtml(bus, speed, heading));
+            if (marker.getPopup()?.isOpen()) marker.setPopupContent(this.busPopupHtml(bus, speed, heading));
             return;
         }
 
@@ -208,29 +342,130 @@ class GoogleMapsHelper {
             newMarker.bindPopup(this.busPopupHtml(bus, speed, heading));
         }
         this.busMarkers[id] = newMarker;
+        this.track(bus);
+    }
+
+    // ------------------------------------------------------------------
+    // Smooth live movement
+    // ------------------------------------------------------------------
+    //
+    // Every GPS sample carries the time it was measured (sample_t, server clock), the bus's
+    // speed and how far along its route it is (progress_m). Each screen frame we work out
+    // where the bus is NOW: its last sample, moved on along the road at its speed for the
+    // time since (at most EXTRAPOLATE_MAX_S). The marker eases towards that point, so it
+    // moves continuously at the real pace, follows curves, and corrects gently when the
+    // next GPS fix arrives - instead of jumping or stopping and starting every second.
+
+    /** Learns the server's clock from a live message ("now"), to compare with sample times. */
+    noteServerTime(serverNow) {
+        const offset = serverNow - Date.now() / 1000;          // the smallest network delay wins
+        this.clockOffset = this.clockOffset === null ? offset : Math.max(offset, this.clockOffset - 0.05);
+    }
+
+    serverNow() {
+        return Date.now() / 1000 + (this.clockOffset || 0);
+    }
+
+    isStale(bus) {
+        return !!bus.last_update_ts && this.clockOffset !== null && this.serverNow() - bus.last_update_ts > STALE_S;
+    }
+
+    /** Adds a bus's latest live state as a sample for the animation. */
+    track(bus) {
+        const id = bus.bus_id;
+        const sample = {
+            t: bus.sample_t || this.serverNow(),
+            lat: bus.current_latitude,
+            lng: bus.current_longitude,
+            p: typeof bus.progress_m === "number" ? bus.progress_m : null,
+            route: bus.assigned_route_id,
+            speed: this.isStale(bus) ? 0 : (bus.speed_kmh || 0) / 3.6,      // m/s
+            heading: bus.heading_deg || 0
+        };
+        let tr = this.tracks[id];
+        if (!tr) {
+            tr = this.tracks[id] = { samples: [], lat: sample.lat, lng: sample.lng, heading: sample.heading };
+        }
+        const last = tr.samples[tr.samples.length - 1];
+        if (last && sample.t <= last.t) {
+            if (sample.t === last.t) Object.assign(last, sample);   // same fix again (e.g. stale flag changed)
+        } else {
+            tr.samples.push(sample);
+            if (tr.samples.length > 3) tr.samples.shift();
+        }
+        this.startAnimation();
+    }
+
+    /** Where the bus should be right now: its last sample, carried on along the road at its speed. */
+    targetOf(tr, now) {
+        const a = tr.samples[tr.samples.length - 1];
+        const b = tr.samples[tr.samples.length - 2];
+        const dt = Math.max(0, Math.min(EXTRAPOLATE_MAX_S, now - a.t));
+        if (a.speed < 0.5 || dt === 0) return { lat: a.lat, lng: a.lng, heading: a.heading };
+
+        const road = a.p !== null ? this.roadLines[a.route] : null;
+        if (road) {
+            let dir = 1;
+            if (b && b.p !== null && b.route === a.route && a.p !== b.p) dir = Math.sign(a.p - b.p);
+            else if (Math.abs(turnBetween(road.pointAt(a.p).bearing, a.heading)) > 90) dir = -1;
+            const at = road.pointAt(a.p + dir * a.speed * dt);
+            return { lat: at.lat, lng: at.lng, heading: dir > 0 ? at.bearing : (at.bearing + 180) % 360 };
+        }
+        const d = a.speed * dt, h = a.heading * Math.PI / 180;
+        return {
+            lat: a.lat + d * Math.cos(h) / M_PER_DEG,
+            lng: a.lng + d * Math.sin(h) / (M_PER_DEG * Math.cos(a.lat * Math.PI / 180)),
+            heading: a.heading
+        };
+    }
+
+    startAnimation() {
+        if (this.animating) return;
+        this.animating = true;
+        let previous = performance.now();
+        const frame = (nowMs) => {
+            const ids = Object.keys(this.tracks);
+            if (!ids.length || !this.leafletMap) { this.animating = false; return; }
+            const dt = Math.min(0.5, (nowMs - previous) / 1000);
+            previous = nowMs;
+            const now = this.serverNow();
+            ids.forEach(id => this.drawFrame(id, now, dt));
+            requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
     }
 
     /**
-     * Moves a marker smoothly to a new position (about one second), so live buses
-     * glide along instead of jumping between GPS fixes. Big jumps snap straight there.
+     * Moves one marker for this frame. The marker travels WITH the bus (the change of the
+     * predicted position since the last frame) and works off any difference to the prediction
+     * a little each second - so a new GPS fix bends the path gently instead of making the bus
+     * jump, stop or race to catch up.
      */
-    glideMarker(marker, to, ms = 900) {
-        const cur = marker.getLatLng();
-        const from = [cur.lat, cur.lng];
-        if (marker._glide) cancelAnimationFrame(marker._glide);
+    drawFrame(id, now, dt) {
+        const tr = this.tracks[id], marker = this.busMarkers[id];
+        if (!tr || !marker || !tr.samples.length) return;
+        const target = this.targetOf(tr, now);
+        const before = this.targetOf(tr, now - dt);
+        const far = metresBetween([tr.lat, tr.lng], [target.lat, target.lng]) > 400;
+        const share = far || document.hidden ? 1 : Math.min(1, CORRECT_PER_S * dt);   // big jumps: go straight there
+        const moveLat = (target.lat - before.lat) * (1 - share) + (target.lat - tr.lat) * share;
+        const moveLng = (target.lng - before.lng) * (1 - share) + (target.lng - tr.lng) * share;
+        const turn = turnBetween(tr.heading, target.heading) * Math.min(1, 6 * dt);
+        if (Math.abs(moveLat) < 1e-8 && Math.abs(moveLng) < 1e-8 && Math.abs(turn) < 0.05) return;   // at rest
 
-        const dLat = to[0] - from[0], dLng = to[1] - from[1];
-        const far = Math.abs(dLat) > 0.02 || Math.abs(dLng) > 0.02;          // > ~2 km: just jump
-        if (far || (dLat === 0 && dLng === 0) || document.hidden) { marker.setLatLng(to); return; }
-
-        const start = performance.now();
-        const step = (now) => {
-            const t = Math.min(1, (now - start) / ms);
-            const e = t * (2 - t);                                              // ease-out
-            marker.setLatLng([from[0] + dLat * e, from[1] + dLng * e]);
-            marker._glide = t < 1 ? requestAnimationFrame(step) : null;
-        };
-        marker._glide = requestAnimationFrame(step);
+        tr.lat += moveLat;
+        tr.lng += moveLng;
+        tr.heading = (tr.heading + turn + 360) % 360;
+        const pos = [tr.lat, tr.lng];
+        marker.setLatLng(pos);
+        const arrow = tr.arrow || (tr.arrow = marker.getElement()?.querySelector(".gmap-bus-heading"));
+        if (arrow) arrow.style.transform = `rotate(${tr.heading.toFixed(1)}deg)`;   // only the arrow turns
+        const tip = this.trailTips[id];
+        if (tip) {
+            const tail = tip.getLatLngs()[0];
+            tip.setLatLngs([tail, pos]);
+        }
+        if (this.onFrame) this.onFrame(id, pos);
     }
 
     /** Popup shown when a bus is tapped on the driver map. */
@@ -255,28 +490,46 @@ class GoogleMapsHelper {
     updateTrails(buses = []) {
         if (!this.leafletMap) return;
         const keep = new Set();
+        const style = {
+            color: window.APP_CONFIG?.trailColor || "#DC2626", weight: 5, opacity: 0.9,
+            lineJoin: "round", lineCap: "round", interactive: false
+        };
         buses.forEach(bus => {
-            const pts = (bus.trail || []).slice();
-            if (bus.is_active && bus.current_latitude && bus.current_longitude) {
-                pts.push([bus.current_latitude, bus.current_longitude]);   // reach right up to the bus
-            }
-            if (pts.length < 2) return;
-            keep.add(bus.bus_id);
+            const pts = bus.trail || [];
+            if (!bus.is_active || !pts.length) return;
+            const id = bus.bus_id;
+            keep.add(id);
 
-            if (this.trails[bus.bus_id]) {
-                this.trails[bus.bus_id].setLatLngs(pts);
+            // Draw only the new points; redraw everything if the trail was restarted or trimmed
+            const drawn = this.trailDrawn[id];
+            const line = this.trails[id];
+            const sameTrail = drawn && line && pts[0] === drawn.first && pts.length >= drawn.count;
+            if (!line) {
+                this.trails[id] = L.polyline(pts, style).addTo(this.leafletMap);
+            } else if (sameTrail) {
+                for (let i = drawn.count; i < pts.length; i++) line.addLatLng(pts[i]);
             } else {
-                this.trails[bus.bus_id] = L.polyline(pts, {
-                    color: window.APP_CONFIG?.trailColor || "#DC2626", weight: 5, opacity: 0.9, lineJoin: "round", lineCap: "round", interactive: false
-                }).addTo(this.leafletMap);
+                line.setLatLngs(pts);
             }
-            this.trails[bus.bus_id].bringToFront();   // always above the route lines
+            this.trailDrawn[id] = { first: pts[0], count: pts.length };
+
+            // The tip joins the last trail point to the moving marker (moved every frame)
+            const tr = this.tracks[id];
+            const at = tr ? [tr.lat, tr.lng] : [bus.current_latitude, bus.current_longitude];
+            const tip = this.trailTips[id];
+            if (tip) tip.setLatLngs([pts[pts.length - 1], at]);
+            else this.trailTips[id] = L.polyline([pts[pts.length - 1], at], style).addTo(this.leafletMap);
+            this.trails[id].bringToFront();   // always above the route lines
+            this.trailTips[id].bringToFront();
         });
 
         Object.keys(this.trails).forEach(id => {
             if (keep.has(id)) return;
             this.trails[id].remove();
+            this.trailTips[id]?.remove();
             delete this.trails[id];
+            delete this.trailTips[id];
+            delete this.trailDrawn[id];
         });
     }
 
@@ -351,6 +604,7 @@ class GoogleMapsHelper {
         if (!this.leafletMap) return;
         Object.values(this.polylines).forEach(p => { p.glowLine.remove(); p.mainLine.remove(); });
         this.polylines = {};
+        this.roadLines = {};
 
         const lineStyle = { lineJoin: "round", lineCap: "round", interactive: false };
         routes.forEach(route => {
@@ -359,6 +613,7 @@ class GoogleMapsHelper {
             const glowLine = L.polyline(points, { ...lineStyle, color: "#ffffff", weight: 9, opacity: 0.95 }).addTo(this.leafletMap);
             const mainLine = L.polyline(points, { ...lineStyle, color: route.color_hex || "#2563EB", weight: 5, opacity: 0.9 }).addTo(this.leafletMap);
             this.polylines[route.route_id] = { glowLine, mainLine, points };
+            this.roadLines[route.route_id] = new RoadLine(points);
         });
     }
 
@@ -401,3 +656,4 @@ class GoogleMapsHelper {
 }
 
 window.googleMapsHelper = new GoogleMapsHelper();
+window.BusFeed = BusFeed;

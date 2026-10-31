@@ -17,6 +17,7 @@ function switchTab(tabName) {
     document.querySelectorAll(".admin-nav-item").forEach(n => n.classList.remove("active"));
     tab.classList.add("active");
     nav.classList.add("active");
+    if (tabName === "live") startLiveMap();
     try { sessionStorage.setItem("busplus_admin_tab", tabName); } catch (e) { /* storage blocked */ }
 }
 try {
@@ -605,3 +606,86 @@ document.getElementById("form-schedule")?.addEventListener("submit", async (e) =
     if (ok) location.reload();
     else showFormError("schedule-form-error", data.message || AT("Could not save the schedule."));
 });
+
+// ---------- Live map tab ----------
+/** Opens the Live map the first time its tab is shown: same smooth live buses as the riders' map. */
+function startLiveMap() {
+    const helper = window.googleMapsHelper;
+    if (!helper || !window.BusFeed) return;
+    if (window.adminLive) {
+        setTimeout(() => helper.leafletMap?.invalidateSize(), 50);    // the tab was hidden: re-measure
+        return;
+    }
+    helper.initMap("admin-live-map");
+    helper.drawRoutes(ADMIN_DATA.routes);
+    helper.fitToPoints(helper.getRoutePoints(null), 24);
+    helper.onBusMarkerClick = null;
+    window.adminLive = new BusFeed({
+        pollMs: 3000,
+        onUpdate: (buses) => {
+            const live = buses.filter(b => b.is_active);
+            helper.updateTrails(live);
+            helper.updateActiveBuses(live);
+            renderLiveList(live);
+        }
+    }).start();
+    setInterval(() => renderLiveList([...window.adminLive.buses.values()].filter(b => b.is_active)), 5000);
+}
+
+/** The table next to the live map: each online bus, its speed, next stop and how old its GPS is. */
+function renderLiveList(live) {
+    const rows = document.getElementById("live-bus-rows");
+    if (!rows) return;
+    if (!live.length) {
+        rows.innerHTML = `<tr><td colspan="4" class="muted">${esc(AT("No bus is online."))}</td></tr>`;
+        return;
+    }
+    const helper = window.googleMapsHelper;
+    rows.innerHTML = live.map(bus => {
+        const age = Math.max(0, Math.round(helper.serverNow() - (bus.last_update_ts || 0)));
+        const ago = age < 5 ? AT("now") : age < 120 ? AT("{seconds} s ago", { seconds: age }) : AT("{minutes} min ago", { minutes: Math.round(age / 60) });
+        return `<tr class="${age > 30 ? "live-stale" : ""}">
+            <td><span class="live-bus" data-bus="${esc(bus.bus_id)}"><span class="bus-color-dot" style="--bus-color:${esc(bus.color_hex)}"></span>${esc(bus.bus_number)}</span></td>
+            <td>${esc(AT("{speed} km/h", { speed: Math.round(bus.speed_kmh || 0) }))}</td>
+            <td>${esc(bus.next_stop_name || "—")}</td>
+            <td>${esc(ago)}</td></tr>`;
+    }).join("");
+    rows.querySelectorAll(".live-bus").forEach(el => el.addEventListener("click", () => {
+        const bus = window.adminLive.buses.get(el.dataset.bus);
+        if (bus) helper.fitToPoints([[bus.current_latitude, bus.current_longitude]], 24);
+    }));
+}
+
+// ---------- Background GPS (Traccar Client) ----------
+let trackerDriverId = null;
+
+/** Shows the Traccar Client settings (server URL + secret key) for one driver. */
+async function openTrackerModal(driverId, name, renew = false) {
+    trackerDriverId = driverId;
+    document.getElementById("tracker-modal-title").textContent = AT("Background GPS · {name}", { name });
+    const { ok, data } = await api("POST", `/api/admin/drivers/${encodeURIComponent(driverId)}/tracker`, { renew });
+    if (!ok) { toast(data.message || AT("Something went wrong."), true); return; }
+    document.getElementById("tracker-url").textContent = data.server_url;
+    document.getElementById("tracker-key").textContent = data.key;
+    if (data.message) toast(data.message);
+    openModal("modal-tracker");
+}
+
+/** Replaces the driver's key (after asking): the old key stops working at once. */
+function renewTrackerKey() {
+    if (!trackerDriverId) return;
+    if (!confirm(AT("Make a new key? The driver must then enter the new one in the app."))) return;
+    const name = document.getElementById("tracker-modal-title").textContent.split(" · ").slice(1).join(" · ");
+    openTrackerModal(trackerDriverId, name, true);
+}
+
+/** Copies the server URL or key to the clipboard. */
+async function copyTracker(elementId) {
+    const text = document.getElementById(elementId).textContent;
+    try {
+        await navigator.clipboard.writeText(text);
+        toast(AT("Copied"));
+    } catch (e) {
+        toast(text);
+    }
+}

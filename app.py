@@ -24,7 +24,7 @@ try:
     from controllers import ALL_BLUEPRINTS
     from extensions import csrf, db, limiter, talisman
     from models.rider_types import DRIVER, RIDER_TYPES
-    from services import schedule_service, store, tracking, users
+    from services import schedule_service, store, trackers, tracking, users
     from services.words import fill, page_words, say, words
 except ModuleNotFoundError as missing:
     # A library from requirements.txt isn't installed yet: say how to fix it instead of a long error.
@@ -83,9 +83,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         store.seed_defaults(with_demo_drivers=app.config["SEED_DEMO_DRIVERS"])
         tracking.load()
         users.load()
+        trackers.load()
         schedule_service.seed_timetables()
         for driver in users.all_drivers():
             tracking.show_driver_on_bus(driver.driver_id, driver.full_name, driver.assigned_bus_id)
+
+    tracking.start_auto_offline()          # buses whose GPS stopped long ago go offline by themselves
 
     for blueprint in ALL_BLUEPRINTS:
         app.register_blueprint(blueprint)

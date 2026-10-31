@@ -105,5 +105,8 @@ WORDS = {
     "This page has expired. Please reload it and try again.": "This page has expired. Please reload it and try again.",
     "Too many attempts. Please wait a minute and try again.": "Too many attempts. Please wait a minute and try again.",
     "Something went wrong on the server. Please try again.": "Something went wrong on the server. Please try again.",
+
+    # ---- Background GPS (Traccar Client) ----
+    "New key made. The old one no longer works.": "New key made. The old one no longer works.",
 }
 # fmt: on
