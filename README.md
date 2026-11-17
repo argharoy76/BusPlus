@@ -2,9 +2,9 @@
 
 BusPlus shows where every Khulna University bus is, live on a map.
 
-- **Drivers** sign in on their phone and go online. The phone's GPS moves their bus on everyone's map about once a second.
-- **Students** and **teachers** open the live map. Each group sees only its own buses. They can save their home and get a notice before the bus arrives.
-- The **admin** manages drivers, routes and buses in the backend at `/backend`, including which route each bus drives today. Every route ends at **Hadi Chattar**.
+- Every bus carries a **GPS box** (ESP32 + NEO-6M). It sends the bus's position every 2 seconds and moves the bus on everyone's map. Nobody on the bus has to do anything. Wiring and firmware: **[firmware/README.md](firmware/README.md)**.
+- **Students**, **teachers** and **staff** open the live map. Each group sees only its own buses. They can save their home and get a notice before the bus arrives.
+- The **admin** manages GPS boxes, routes and buses in the backend at `/backend`, including which route each bus drives today. Every route ends at **Hadi Chattar**.
 
 It works on phones and on PC: phones get a bottom sheet you drag, PCs get a side panel.
 
@@ -25,8 +25,8 @@ python app.py
 - Backend: <http://localhost:5000/backend>
   - username `admin`
   - the password is created on the first start and saved in `instance/admin_password.txt`
-- On your computer the first start also creates four demo drivers, all with PIN `1234`.
-  - Example: driver **Md. Rafiqul Islam** with route **Malabotha - Rupsha - KU Line**.
+- To see a bus move without hardware: in the backend open **GPS devices → Add a device** (Manually or Quick add), copy the key, then run
+  `python tools/simulate_gps_box.py <key>`. Without a key the simulator asks to join by itself: approve it under **Add a device → Automatically**. Or use **Test drive** in the **Buses** tab.
 
 Optional: copy `.env.example` to `.env` to choose your own settings.
 
@@ -72,15 +72,16 @@ gunicorn.conf.py        production server settings (1 process, gevent)
 
 controllers/            URLs, one file per area
   view_controller.py      the pages
-  auth_controller.py      sign-in / sign-out (admin, drivers, students, teachers)
-  bus_controller.py       live buses, the live stream, and the driver phone API
+  auth_controller.py      sign-in / sign-out (admin, students, teachers, staff)
+  bus_controller.py       live buses and the live stream
+  device_controller.py    positions from the GPS boxes (/api/device/location)
   route_controller.py     routes and "your bus is coming" checks
-  admin_controller.py     the backend: drivers, buses, routes, road snapping
-  helpers.py              shared helpers (JSON replies, driver check)
+  admin_controller.py     the backend: GPS devices, buses, routes, road snapping
+  helpers.py              shared helpers (JSON replies)
 
 services/               the app's logic
   tracking_service.py     routes, buses, live GPS, trails, test drives, live updates
-  user_service.py         driver accounts, PIN sign-in, one-phone lock, duty notices
+  device_service.py       GPS boxes: secret keys (stored hashed), reading their reports
   notification_service.py arrival alerts
   geo.py                  distances, directions, ETA
   road_router.py          snaps a drawn route to real roads (OpenStreetMap / OSRM)
@@ -88,12 +89,14 @@ services/               the app's logic
 
 models/                 data
   records.py              database tables
-  route.py, bus.py, user.py   objects used while the app runs
+  route.py, bus.py, device.py objects used while the app runs
   seed_data.py, route_paths.py  built-in KU routes and buses for a new database
 
 templates/              HTML pages (Jinja)
 static/                 CSS, JavaScript, images
   vendor/                 Leaflet map library and Inter font, served locally
+firmware/               the GPS box: ESP32 + NEO-6M sketch, wiring and setup guide
+tools/                  simulate_gps_box.py: pretend to be a GPS box for testing
 deploy/                 server setup, update, backup, nginx and systemd files
 tests/                  automated tests (pytest)
 ```
@@ -103,9 +106,9 @@ tests/                  automated tests (pytest)
 - **Saved in the database** (`instance/busplus.db`, SQLite):
   - routes
   - buses
-  - drivers (PINs are stored only as hashes)
-  - which students and teachers have signed in
-- **Kept in memory only**: live GPS positions, speeds and trails. These come back as soon as drivers send their next position.
+  - GPS devices (their keys are stored only as hashes)
+  - which students, teachers and staff have signed in
+- **Kept in memory only**: live GPS positions, speeds and trails. These come back as soon as each GPS box sends its next position.
 - Because of the in-memory data, the app runs as **one** server process. gevent lets that one process serve hundreds of open maps.
 
 ### Libraries used
@@ -115,13 +118,14 @@ tests/                  automated tests (pytest)
 | Flask | Web framework |
 | Flask-SQLAlchemy and SQLAlchemy | Database |
 | Flask-WTF | CSRF protection |
-| Flask-Limiter | Login rate limits |
+| Flask-Limiter | Login and GPS report rate limits |
 | Flask-Talisman | Security headers, HTTPS and HSTS |
-| Werkzeug | PIN hashing |
+| hashlib (Python) | Hashing the GPS devices' keys |
 | python-dotenv | Loading `.env` settings |
 | requests | Calls to the road router |
 | gunicorn and gevent | Production server |
 | Leaflet | Maps in the browser |
+| TinyGPSPlus (Arduino) | Reading the NEO-6M on the ESP32 |
 | pytest and ruff | Tests and code checks |
 
 Security details are in [SECURITY.md](SECURITY.md).

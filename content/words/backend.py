@@ -1,5 +1,5 @@
 """
-BACKEND (/backend) - the admin panel: Drivers, Routes, Buses, Schedules and Users tabs,
+BACKEND (/backend) - the admin panel: Live map, GPS devices, Routes, Buses, Schedules and Users tabs,
 their tables, the Add / Edit pop-ups and the small messages at the bottom.
 Change only the right side of each line. (Help: content/words/__init__.py)
 {app} = the app's name (content/branding.py), {stop} = the final stop (content/map_settings.py).
@@ -9,7 +9,7 @@ WORDS = {
     # ---- Browser tab and left menu ----
     "{app} Backend": "{app} Backend",
     "Backend": "Backend",
-    "Drivers": "Drivers",
+    "GPS devices": "GPS devices",
     "Routes": "Routes",
     "Buses": "Buses",
     "Schedules": "Schedules",
@@ -29,36 +29,56 @@ WORDS = {
     "Route": "Route",
     "Route today": "Route today",
     "Bus": "Bus",
-    "Driver": "Driver",
     "Edit {name}": "Edit {name}",
 
-    # ---- Drivers tab ----
-    "Drivers sign in on the {app} app (not here) with the name and PIN you set.":
-        "Drivers sign in on the {app} app (not here) with the name and PIN you set.",
-    "Add driver": "Add driver",
-    "Signed in now": "Signed in now",
-    "Phone": "Phone",
-    "Bus today": "Bus today",
-    "No bus": "No bus",
-    "Signed in": "Signed in",
-    "Available": "Available",
-    "Unlock": "Unlock",
-    "Sign {name} out of their device so they can log in again?":
-        "Sign {name} out of their device so they can log in again?",
-    "Could not unlock.": "Could not unlock.",
-    "Delete driver {name}?": "Delete driver {name}?",
-    "Could not delete.": "Could not delete.",
+    # ---- GPS devices tab (ESP32 + NEO-6M boxes, one per bus) ----
+    "Add device": "Add device",
+    "Devices": "Devices",
+    "Sending GPS now": "Sending GPS now",
+    "Buses without a device": "Buses without a device",
+    "Device": "Device",
+    "Sending GPS": "Sending GPS",                              # status: good positions are arriving
+    "Searching for satellites": "Searching for satellites",    # status: connected, but no GPS position yet
+    "Never connected": "Never connected",                      # status: nothing heard since the server started
+    "{count} satellites": "{count} satellites",
+    "HDOP {hdop}": "HDOP {hdop}",                              # GPS precision: 1 = excellent, above 5 = poor
+    "key …{hint}": "key …{hint}",
+    "firmware {version}": "firmware {version}",
+    "{hours} h ago": "{hours} h ago",
+    "New key": "New key",
+    "Make a new key (the old one stops working)": "Make a new key (the old one stops working)",
+    "Make a new key for {name}? The old key stops working at once, so the device must be updated.":
+        "Make a new key for {name}? The old key stops working at once, so the device must be updated.",
+    "Delete {name}? Its key stops working and its bus goes offline.":
+        "Delete {name}? Its key stops working and its bus goes offline.",
+    "Could not delete the device.": "Could not delete the device.",
 
-    # ---- Add / Edit driver pop-up ----
-    "Driver name": "Driver name",
-    "e.g. Md. Tariqul Islam": "e.g. Md. Tariqul Islam",
-    "+880 17xx-xxxxxx": "+880 17xx-xxxxxx",
-    "Login PIN": "Login PIN",
-    "{min}–{max} digits": "{min}–{max} digits",
-    "New PIN (optional)": "New PIN (optional)",
-    "Leave empty to keep the current PIN.": "Leave empty to keep the current PIN.",
-    "Route today: {route}": "Route today: {route}",
-    "Could not save the driver.": "Could not save the driver.",
+    # ---- Add / Edit device pop-up ----
+    "Device name": "Device name",
+    "e.g. Tracker in Bus #01": "e.g. Tracker in Bus #01",
+    "Fitted to bus": "Fitted to bus",
+    "Not fitted to a bus": "Not fitted to a bus",
+    "Its positions move this bus on every map. One device per bus.":
+        "Its positions move this bus on every map. One device per bus.",
+    "Could not save the device.": "Could not save the device.",
+
+    # ---- Device settings pop-up (shown once, right after a key is made) ----
+    "Device settings": "Device settings",
+    "Device settings · {name}": "Device settings · {name}",
+    "Put these into firmware/busplus_tracker/secrets.h, add your Wi-Fi name and password, then upload the sketch to the ESP32.":
+        "Put these into firmware/busplus_tracker/secrets.h, add your Wi-Fi name and password, then upload the sketch to the ESP32.",
+    "Server URL": "Server URL",
+    "Device key": "Device key",
+    "Copy": "Copy",
+    "Copy all": "Copy all",
+    "Copied": "Copied",
+    "This computer calls itself \"localhost\", which the ESP32 can't reach, so its network address is used instead. Start BusPlus with HOST=0.0.0.0 so the ESP32 can connect (see firmware/README.md).":
+        "This computer calls itself \"localhost\", which the ESP32 can't reach, so its network address is used instead. Start BusPlus with HOST=0.0.0.0 so the ESP32 can connect (see firmware/README.md).",
+    "This key is shown only now. Keep it secret: anyone with it can move this bus on the map. Lost it? Make a new key.":
+        "This key is shown only now. Keep it secret: anyone with it can move this bus on the map. Lost it? Make a new key.",
+    "Device saved. Copy its key now.": "Device saved. Copy its key now.",
+    "Done": "Done",
+    "Something went wrong.": "Something went wrong.",
 
     # ---- Routes tab ----
     "Add or remove routes. Every route ends at {stop}.": "Add or remove routes. Every route ends at {stop}.",
@@ -74,7 +94,7 @@ WORDS = {
     # ---- Add / Edit route pop-up (map editor) ----
     "Route name": "Route name",
     "e.g. Rupsha - {stop}": "e.g. Rupsha - {stop}",
-    "Riders, drivers and the admin all see this name.": "Riders, drivers and the admin all see this name.",
+    "Riders and the admin both see this name.": "Riders and the admin both see this name.",
     "Colour": "Colour",
     "Click the map where the route starts.": "Click the map where the route starts.",
     "Undo last point": "Undo last point",
@@ -95,12 +115,13 @@ WORDS = {
     "Could not save the route.": "Could not save the route.",
 
     # ---- Buses tab ----
-    "Choose each bus's route for today. Its driver sees the change on the app.":
-        "Choose each bus's route for today. Its driver sees the change on the app.",
+    "Choose each bus's route for today. The maps change straight away.":
+        "Choose each bus's route for today. The maps change straight away.",
     "Add bus": "Add bus",
     "Live now": "Live now",
     "Final destination": "Final destination",
     "For": "For",
+    "GPS device": "GPS device",
     "{count} seats": "{count} seats",
     "Who {bus} is for": "Who {bus} is for",
     "Choose…": "Choose…",
@@ -111,7 +132,6 @@ WORDS = {
     "Drive this bus along its route (for testing)": "Drive this bus along its route (for testing)",
     "Test drive": "Test drive",
     "Stop": "Stop",
-    "{bus} → {route}. Its driver has been notified.": "{bus} → {route}. Its driver has been notified.",
     "Could not change the route.": "Could not change the route.",
     "{bus} is now a bus for {group}.": "{bus} is now a bus for {group}.",
     "Could not change it.": "Could not change it.",
@@ -179,22 +199,43 @@ WORDS = {
     "{seconds} s ago": "{seconds} s ago",
     "{minutes} min ago": "{minutes} min ago",
 
-    # ---- Background GPS pop-up (Traccar Client app) ----
-    "Background GPS": "Background GPS",
-    "Send GPS with the screen off (Traccar Client app)": "Send GPS with the screen off (Traccar Client app)",
-    "Background GPS · {name}": "Background GPS · {name}",
-    "A web page can only share GPS while it is open on the screen. With the free Traccar Client app the driver's phone keeps sending its location with the screen off or another app open.": "A web page can only share GPS while it is open on the screen. With the free Traccar Client app the driver's phone keeps sending its location with the screen off or another app open.",
-    "Install Traccar Client from the Play Store (Android) or App Store (iPhone).": "Install Traccar Client from the Play Store (Android) or App Store (iPhone).",
-    "Open it and enter these two settings:": "Open it and enter these two settings:",
-    "Server URL": "Server URL",
-    "Device identifier": "Device identifier",
-    "Copy": "Copy",
-    "Copied": "Copied",
-    "Set Location accuracy to High, Frequency to 3 seconds, Distance to 0.": "Set Location accuracy to High, Frequency to 3 seconds, Distance to 0.",
-    'Allow location "All the time", turn off battery saving for the app, then switch Service status on.': 'Allow location "All the time", turn off battery saving for the app, then switch Service status on.',
-    "The bus goes online with the first position and offline by itself when no GPS arrives for a few minutes. Keep the key secret: anyone with it can move this driver's bus.": "The bus goes online with the first position and offline by itself when no GPS arrives for a few minutes. Keep the key secret: anyone with it can move this driver's bus.",
-    "Make a new key": "Make a new key",
-    "Make a new key? The driver must then enter the new one in the app.": "Make a new key? The driver must then enter the new one in the app.",
-    "Done": "Done",
-    "Something went wrong.": "Something went wrong.",
+    # ---- GPS devices tab: add manually / automatically, boxes asking to join, on / off the map ----
+    "Add a device": "Add a device",
+    "Approve": "Approve",
+    "Asked": "Asked",
+    "Automatically": "Automatically",
+    "Boxes asking to join": "Boxes asking to join",
+    "Chip ID": "Chip ID",
+    "chip {chip}": "chip {chip}",
+    "Connected devices": "Connected devices",
+    "Edit device": "Edit device",
+    "Give the device a name.": "Give the device a name.",
+    "How to add a device": "How to add a device",
+    "joined before as {name}": "joined before as {name}",
+    "Made for you if empty": "Made for you if empty",
+    "Manually": "Manually",
+    "Off the map": "Off the map",
+    "On the map": "On the map",
+    "Operations": "Operations",
+    "Pairing code": "Pairing code",
+    "People": "People",
+    "Quick add": "Quick add",
+    "Reject": "Reject",
+    "Reject box {chip}? It is ignored for an hour.": "Reject box {chip}? It is ignored for an hour.",
+    "Remove from map": "Remove from map",
+    "Remove {name} from the map? Its bus disappears from every map until you show it again.": "Remove {name} from the map? Its bus disappears from every map until you show it again.",
+    "Setup": "Setup",
+    "Show on map": "Show on map",
+    "View live": "View live",
+    "Waiting for approval": "Waiting for approval",
+    "{bus} (has {device})": "{bus} (has {device})",
+    "{bus} now drives {route}.": "{bus} now drives {route}.",
+
+    # ---- GPS devices tab (more) ----
+    "GPS / signal": "GPS / signal",
+    "Last report {ago}": "Last report {ago}",
+
+    # ---- GPS devices tab (short empty messages) ----
+    "No box is waiting.": "No box is waiting.",
+    "No GPS devices yet.": "No GPS devices yet.",
 }

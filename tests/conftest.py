@@ -2,14 +2,14 @@
 Shared test setup (pytest fixtures).
 
 Every test gets a brand-new app with an empty in-memory database that is filled
-with the built-in routes, buses and the 4 demo drivers (PIN 1234).
+with the built-in routes and buses.
 """
 
 import pytest
 
 from app import create_app
 from config import TestConfig
-from services import tracking, users
+from services import devices, tracking
 
 
 @pytest.fixture
@@ -37,16 +37,32 @@ def admin(app):
 
 
 @pytest.fixture
-def driver_login(app):
-    """Function that signs a new browser in as a driver: driver_login(name, route, pin) -> (browser, response)."""
-    def login(name="Md. Rafiqul Islam", route_id="KU-R01", pin="1234"):
-        browser = app.test_client()
-        resp = browser.post("/api/auth/driver/login", json={"driver_name": name, "route_id": route_id, "pin": pin})
-        return browser, resp
-    return login
+def add_device(admin):
+    """Function that adds a GPS device in the backend: add_device(name, bus_id) -> its secret key."""
+    def add(name="Tracker in Bus #01", bus_id="KU-BUS-01"):
+        resp = admin.post("/api/admin/devices", json={"name": name, "bus_id": bus_id})
+        assert resp.status_code == 200, resp.get_json()
+        return resp.get_json()["settings"]["key"]
+    return add
+
+
+@pytest.fixture
+def gps_box(app, add_device):
+    """
+    A GPS box (ESP32 + NEO-6M) fitted to KU-BUS-01: gps_box(**report) POSTs one report like the
+    firmware does and returns the response. gps_box.key is its secret key.
+    """
+    key = add_device()
+    browser = app.test_client()
+
+    def send(key_override=None, **report):
+        body = {"fix": True, "sats": 8, "hdop": 1.0, "age_ms": 200, **report}
+        return browser.post("/api/device/location", json=body, headers={"X-Device-Key": key_override or key})
+    send.key = key
+    return send
 
 
 @pytest.fixture
 def services():
     """The live services, for setting up situations directly (e.g. a bus at a given place)."""
-    return tracking, users
+    return tracking, devices

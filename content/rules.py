@@ -2,22 +2,23 @@
 RULES AND TIMINGS
 """
 
-# ---- Drivers ----------------------------------------------------------------
-# A driver's PIN must be this many digits (smallest, largest).
-PIN_MIN_DIGITS = 4
-PIN_MAX_DIGITS = 8
-
-# A driver account works on one phone at a time. If that phone sends nothing for
-# this many minutes, the driver may sign in on another phone.
-DRIVER_LOCK_MINUTES = 10
-
-# The driver's phone sends its position at most this often (seconds) ...
-GPS_SEND_EVERY_SECONDS = 1
-# ... or sooner when the bus has moved this many metres.
-GPS_SEND_AFTER_METERS = 8
+# ---- GPS tracker boxes (ESP32 + NEO-6M, services/device_service.py) ----------
+# Each box sends its position this often (seconds). The box is told this value in every
+# answer, so changing it here changes every box without re-flashing it.
+DEVICE_SEND_EVERY_SECONDS = 2
+# A box that has sent nothing for this many seconds shows as "Offline" in the backend.
+DEVICE_OFFLINE_SECONDS = 60
+# Positions older than this (seconds) when they arrive are not shown live (only noted).
+DEVICE_MAX_FIX_AGE_SECONDS = 120
+# Reports per minute one box (one key) may send to /api/device/location.
+DEVICE_LIMIT = "120 per minute"
+# Requests per minute a box without a key may send to /api/device/pair while it asks to join.
+DEVICE_PAIR_LIMIT = "30 per minute"
+# The NEO-6M reports its precision as HDOP. Accuracy in metres is about HDOP x this.
+GPS_HDOP_TO_METERS = 5.0
 
 # ---- Speed shown on the maps (services/speedometer.py) ------------------------
-# A parked phone's GPS still wobbles a few metres. The bus counts as STOPPED (speed 0,
+# A parked bus's GPS still wobbles a few metres. The bus counts as STOPPED (speed 0,
 # marker stays still) while it moves less than this many metres (or its GPS accuracy, if larger)
 # over the last few seconds.
 SPEED_STOPPED_RADIUS_M = 10
@@ -30,18 +31,16 @@ GPS_IGNORE_ACCURACY_M = 80
 # No GPS from a live bus for this many seconds: its speed shows as 0.
 SPEED_STALE_SECONDS = 15
 
-# ---- Background GPS (Traccar Client app, services/tracker_service.py) ---------
-# A live bus whose phone has sent no GPS for this many minutes goes offline by itself
-# (e.g. the driver switched the app off, or the phone died). 0 = never.
+# ---- Going offline ------------------------------------------------------------
+# A live bus whose GPS box has sent no position for this many minutes goes offline by itself
+# (e.g. the bus was switched off, or the box lost power or signal). 0 = never.
 AUTO_OFFLINE_MINUTES = 5
-# Positions per minute one phone (IP address) may send to /api/tracker.
-TRACKER_LIMIT = "240 per minute"
 
 # ---- Keeping buses on the road (services/route_geometry.py) -------------------
 # GPS this close (metres) to the bus's route line is put exactly on the road, so the bus
 # glides along the road instead of wobbling beside it. Further away = off its route: shown as is.
 ROUTE_SNAP_METERS = 35
-# When the red trail would jump further than this (metres) - e.g. the driver's phone was locked
+# When the red trail would jump further than this (metres) - e.g. the GPS box lost its signal
 # for a minute - the gap is drawn along the road instead of a straight line.
 TRAIL_FILL_GAP_METERS = 40
 
@@ -60,13 +59,17 @@ TEST_DRIVE_SPEED = 2.0
 TRAIL_MIN_STEP_KM = 0.012
 TRAIL_MAX_POINTS = 1500
 
-# ---- Students / teachers ----------------------------------------------------
+# ---- Riders (students, teachers, staff) ----------------------------------------------------
 # "Notify me N minutes before the bus arrives": the starting value.
 DEFAULT_ALERT_MINUTES = 5
 # The largest number of minutes a rider may type there.
 MAX_ALERT_MINUTES = 120
 
+# ---- Backend sign-in -----------------------------------------------------------
+# The admin is signed out of the backend this many hours after signing in (also when the
+# browser stays open, and whatever else is signed in in the same browser).
+ADMIN_SESSION_HOURS = 12
+
 # ---- Login protection (attempts allowed per IP address) ---------------------
 ADMIN_LOGIN_LIMIT = "5 per minute; 30 per hour"
-DRIVER_LOGIN_LIMIT = "10 per minute; 60 per hour"
 RIDER_LOGIN_LIMIT = "20 per minute"

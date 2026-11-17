@@ -1,9 +1,8 @@
 """
 WORDS - every piece of text on the website, one file per page.
 
-    login_pages.py       driver, student and teacher sign-in pages
+    login_pages.py       student, teacher and staff sign-in pages
     rider_map.py         student / teacher live map: bottom sheet, menu, Home, alerts
-    driver_map.py        driver's map: duty card, online switch, GPS messages
     bus_schedule.py      the "Bus schedule" pop-up, and the day names
     map.py               things on every map: layer buttons, bus pop-up, "Your location"
     backend_login.py     the admin sign-in page (/backend/login)

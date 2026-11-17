@@ -1,5 +1,5 @@
 """
-"BUS SCHEDULE" POP-UP - opened from the menu on the student / teacher map and the driver's menu.
+"BUS SCHEDULE" POP-UP - opened from the menu on the rider map (students, teachers, staff).
 Change only the right side of each line. (Help: content/words/__init__.py)
 """
 
@@ -29,9 +29,3 @@ DAY_NAMES = {
     "thu": "Thursday",
     "fri": "Friday",
 }
-
-# Month names, used on the driver's duty card ("Sunday, 2 November"). Change only the right side.
-MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-]

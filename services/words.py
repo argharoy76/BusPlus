@@ -5,7 +5,7 @@ Every page has one file there with a WORDS list:   "Original text": "Text shown 
 The code always asks for the ORIGINAL text (left side) and gets back whatever the
 right side says now, so changing the right side changes the page.
 
-    Python (server messages):   say("Driver '{name}' added.", name="Karim")
+    Python (server messages):   say("Route '{name}' added.", name="Rupsha")
     HTML templates:             {% set t = words("rider_map") %}  ...  {{ t("Home") }}
     JavaScript:                 const RT = words("rider_map");   ...  RT("Home saved")
 
@@ -20,7 +20,6 @@ import string
 PAGES = (
     "login_pages",
     "rider_map",
-    "driver_map",
     "bus_schedule",
     "map",
     "backend_login",

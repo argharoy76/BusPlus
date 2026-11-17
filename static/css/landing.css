@@ -1,6 +1,6 @@
 /*
  * Start page (templates/landing.html) and the sign-in pages
- * (templates/driver_login.html, templates/student_login.html).
+ * (templates/student_login.html).
  * Each option / form takes its colour from content/user_types.py through --accent.
  */
 
@@ -151,16 +151,6 @@ body {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.lp-select {
-    appearance: none;
-    -webkit-appearance: none;
-    padding-right: 40px;
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 14px center;
-    background-size: 16px;
-}
 
 .lp-submit {
     height: 52px;
@@ -188,43 +178,6 @@ body {
     color: #b91c1c;
     font-size: 0.9rem;
     font-weight: 500;
-}
-
-/* Driver name suggestions (built by driver_login.html) */
-.fluid-autocomplete-dropdown {
-    display: none;
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    right: 0;
-    z-index: 20;
-    max-height: 260px;
-    overflow-y: auto;
-    background: #ffffff;
-    border: 1px solid #d5dce6;
-    border-radius: 12px;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
-}
-.fluid-autocomplete-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 12px 14px;
-    cursor: pointer;
-}
-.fluid-autocomplete-row + .fluid-autocomplete-row { border-top: 1px solid #f1f4f8; }
-.fluid-autocomplete-row:hover { background: #f6f8fb; }
-.row-driver-name { font-weight: 600; color: var(--bp-text); }
-.row-route-pill {
-    flex: none;
-    max-width: 55%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--bp-muted);
 }
 
 @media (min-width: 900px) {

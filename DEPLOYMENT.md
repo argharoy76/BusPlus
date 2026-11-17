@@ -5,7 +5,7 @@ After this one-time setup, every `git push` to `main` is tested on GitHub and th
 > **You need a Hostinger VPS** (for example KVM 1). Hostinger's shared Web/Cloud hosting can't run Python web apps.
 > To check: in hPanel, a VPS appears under **VPS**, with a root login and an IP address.
 
-You also need a **domain or subdomain** (for example `bus.yourdomain.com`) for HTTPS. Phones only allow GPS on HTTPS sites.
+You also need a **domain or subdomain** (for example `bus.yourdomain.com`) for HTTPS. The GPS boxes send each bus's key, so it should travel encrypted, and phones only share "Your location" on HTTPS sites.
 
 ---
 
@@ -50,7 +50,7 @@ When the script finishes, it prints:
 - the **backend password** (username `admin`). Save it in your password manager.
 - the values for the GitHub secrets in step 3, including a **private key**.
 
-Open `https://bus.yourdomain.com/backend`, sign in, and add your drivers (Drivers → Add Driver).
+Open `https://bus.yourdomain.com/backend`, sign in, and add a GPS device for each bus (GPS devices → Add a device): either put the Server URL and key it shows into each box's firmware, or leave the key empty and approve each box when it asks to join. See [firmware/README.md](firmware/README.md).
 
 ## 3. Turn on automatic deploys (once)
 
@@ -107,10 +107,10 @@ Your data is never touched by updates. `.env`, the database in `instance/` and `
 ## How it runs on the server
 
 ```text
-phone / PC ──HTTPS──> nginx (port 443, Let's Encrypt)
-                        ├─ /static/ ...... files served directly, cached
-                        └─ everything else ──> gunicorn + gevent on 127.0.0.1:8000 (1 process)
-                                                  └─ BusPlus (Flask) ── SQLite: /opt/busplus/instance/busplus.db
+phone / PC / GPS box ──HTTPS──> nginx (port 443, Let's Encrypt)
+                                  ├─ /static/ ...... files served directly, cached
+                                  └─ everything else ──> gunicorn + gevent on 127.0.0.1:8000 (1 process)
+                                                            └─ BusPlus (Flask) ── SQLite: /opt/busplus/instance/busplus.db
 ```
 
 - **App folder:** `/opt/busplus`, owned by the `busplus` user.

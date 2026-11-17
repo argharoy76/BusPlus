@@ -1,7 +1,7 @@
 """
 Map maths: distances, compass directions and arrival-time estimates.
 
-All positions are latitude/longitude in degrees (WGS-84, what phones' GPS gives).
+All positions are latitude/longitude in degrees (WGS-84, what GPS receivers give).
 """
 
 import math
@@ -73,8 +73,10 @@ def estimate_eta(bus_lat: float, bus_lng: float, target_lat: float, target_lng: 
     direct_km = distance_km(bus_lat, bus_lng, target_lat, target_lng)
     road_km = direct_km * ROAD_FACTOR
 
-    # Moving: blend the live speed with a normal speed. Standing or crawling: use the normal speed.
-    speed = bus_speed_kmh * 0.4 + 25.0 * 0.6 if bus_speed_kmh >= 12.0 else CITY_BUS_SPEED_KMH
+    # Faster than normal city traffic: blend the live speed in (so one fast moment doesn't swing the
+    # answer). Slower, standing or crawling: use the normal speed. The two meet at CITY_BUS_SPEED_KMH,
+    # so a bus that speeds up never gets a later arrival time.
+    speed = max(CITY_BUS_SPEED_KMH, bus_speed_kmh * 0.4 + CITY_BUS_SPEED_KMH * 0.6)
 
     minutes = round(road_km / speed * 60.0 + stops_between * DWELL_MINUTES_PER_STOP, 1)
     arrival = local_now() + timedelta(minutes=minutes)

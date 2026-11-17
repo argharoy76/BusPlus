@@ -1,4 +1,4 @@
-/* Backend admin panel (/backend): drivers, routes (map editor), buses, schedules. */
+/* Backend admin panel (/backend): GPS devices, routes (map editor), buses, schedules, live map. */
 
 // Words of this page: content/words/backend.py (AT(original) gives the text shown)
 const AT = words("backend");
@@ -8,7 +8,7 @@ const ADMIN_DATA = JSON.parse(document.getElementById("admin-data").textContent)
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------- Shared helpers ----------
-/** Shows one tab (Drivers, Routes, Buses, Schedules, Users) and remembers it for the next reload. */
+/** Shows one tab (Live map, GPS devices, Routes, Buses, ...) and remembers it for the next reload. */
 function switchTab(tabName) {
     const tab = document.getElementById(`tab-${tabName}`);
     const nav = document.getElementById(`nav-${tabName}`);
@@ -18,6 +18,7 @@ function switchTab(tabName) {
     tab.classList.add("active");
     nav.classList.add("active");
     if (tabName === "live") startLiveMap();
+    if (tabName === "devices") refreshDevices();
     try { sessionStorage.setItem("busplus_admin_tab", tabName); } catch (e) { /* storage blocked */ }
 }
 try {
@@ -69,63 +70,350 @@ async function api(method, url, body) {
     return { ok: resp.ok && data.success !== false, data };
 }
 
-// ---------- Drivers ----------
-const driverBusSelect = document.getElementById("driver-bus");
-/** Under the bus picker in the driver form: which route that bus drives today. */
-function updateDriverRouteNote() {
-    const opt = driverBusSelect.selectedOptions[0];
-    const route = opt ? ADMIN_DATA.routes.find(r => r.route_id === opt.dataset.routeId) : null;
-    document.getElementById("driver-route-note").textContent = route ? AT("Route today: {route}", { route: route.route_name }) : "";
-}
-driverBusSelect.addEventListener("change", updateDriverRouteNote);
+// ---------- GPS devices (ESP32 + NEO-6M tracker boxes) ----------
+// The tab has three parts: "Add a device" (manually / automatically), the counts, and the
+// connected devices. Everything is refreshed from /api/admin/devices every few seconds.
+let gpsDevices = ADMIN_DATA.devices || [];
+let waitingBoxes = [];
+let nextFreeBus = null;
+let serverOffset = (ADMIN_DATA.server_now || Date.now() / 1000) - Date.now() / 1000;   // server clock - this clock
+const DEVICE_REFRESH_MS = 5000;
+const busById = Object.fromEntries(ADMIN_DATA.buses.map(b => [b.bus_id, b]));
 
-/** Opens the Add / Edit driver form (filled in when a driver is given). */
-function openDriverModal(driver) {
-    showFormError("driver-form-error", "");
-    const editing = !!driver;
-    document.getElementById("driver-modal-title").textContent = editing ? AT("Edit {name}", { name: driver.full_name }) : AT("Add driver");
-    document.getElementById("driver-submit-btn").textContent = editing ? AT("Save") : AT("Add driver");
-    document.getElementById("driver-id").value = editing ? driver.driver_id : "";
-    document.getElementById("driver-name").value = editing ? driver.full_name : "";
-    document.getElementById("driver-phone").value = editing ? (driver.phone || "") : "";
-    // PINs are stored hashed, so they can't be shown. Leave the box empty to keep the current PIN.
-    const pinInput = document.getElementById("driver-pin");
-    pinInput.value = "";
-    pinInput.required = !editing;
-    pinInput.placeholder = editing ? AT("New PIN (optional)") : pinInput.dataset.placeholder;
-    document.getElementById("driver-pin-note").textContent = editing ? AT("Leave empty to keep the current PIN.") : "";
-    if (editing && driver.assigned_bus_id) driverBusSelect.value = driver.assigned_bus_id;
-    updateDriverRouteNote();
-    openModal("modal-driver");
-    setTimeout(() => document.getElementById("driver-name").focus(), 50);
+/** What the Status column says for each device status (models/device.py). */
+function deviceStatusText(status) {
+    return {
+        online: AT("Sending GPS"),
+        no_fix: AT("Searching for satellites"),
+        offline: AT("Offline"),
+        never: AT("Never connected")
+    }[status] || status;
 }
 
-document.getElementById("form-driver").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const id = document.getElementById("driver-id").value;
-    const payload = {
-        full_name: document.getElementById("driver-name").value.trim(),
-        phone: document.getElementById("driver-phone").value.trim(),
-        pin: document.getElementById("driver-pin").value.trim(),
-        assigned_bus_id: driverBusSelect.value
-    };
-    const { ok, data } = await api(id ? "PUT" : "POST", id ? `/api/admin/drivers/${encodeURIComponent(id)}` : "/api/admin/drivers", payload);
-    if (ok) location.reload();
-    else showFormError("driver-form-error", data.message || AT("Could not save the driver."));
+/** "now", "12 s ago", "3 min ago", "2 h ago" for a server timestamp (seconds). */
+function agoText(ts) {
+    if (!ts) return "—";
+    const age = Math.max(0, Math.round(Date.now() / 1000 + serverOffset - ts));
+    if (age < 5) return AT("now");
+    if (age < 120) return AT("{seconds} s ago", { seconds: age });
+    if (age < 7200) return AT("{minutes} min ago", { minutes: Math.round(age / 60) });
+    return AT("{hours} h ago", { hours: Math.round(age / 3600) });
+}
+
+/** <option>s of every bus for a "Fitted to bus" list; buses that already have a device say so. */
+function deviceBusOptions(selected, exceptDeviceId = null) {
+    const taken = Object.fromEntries(gpsDevices.filter(d => d.bus_id && d.device_id !== exceptDeviceId).map(d => [d.bus_id, d]));
+    return `<option value="">${esc(AT("Not fitted to a bus"))}</option>` + ADMIN_DATA.buses.map(b => {
+        const other = taken[b.bus_id];
+        const label = other ? AT("{bus} (has {device})", { bus: b.bus_number, device: other.name }) : `${b.bus_number} · ${b.bus_name}`;
+        return `<option value="${esc(b.bus_id)}" ${b.bus_id === selected ? "selected" : ""} ${other ? "disabled" : ""}>${esc(label)}</option>`;
+    }).join("");
+}
+
+/** Counts, the connected devices table, the boxes asking to join and the quick-add hint. */
+function renderDevices() {
+    const rows = document.getElementById("device-rows");
+    if (!rows) return;
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    const fitted = new Set(gpsDevices.map(d => d.bus_id).filter(Boolean));
+    setText("stat-devices", gpsDevices.length);
+    setText("stat-devices-online", gpsDevices.filter(d => d.status === "online").length);
+    setText("stat-devices-hidden", gpsDevices.filter(d => !d.show_on_map).length);
+    setText("stat-devices-waiting", waitingBoxes.length);
+    setText("stat-buses-bare", ADMIN_DATA.buses.filter(b => !fitted.has(b.bus_id)).length);
+    for (const id of ["nav-waiting-count", "waiting-count-badge"]) {
+        const badge = document.getElementById(id);
+        if (badge) { badge.textContent = waitingBoxes.length; badge.hidden = !waitingBoxes.length; }
+    }
+
+    if (!gpsDevices.length) {
+        rows.innerHTML = `<tr><td colspan="6" class="empty-row">${esc(AT("No GPS devices yet."))}</td></tr>`;
+    } else {
+        rows.innerHTML = gpsDevices.map(d => {
+            const bus = busById[d.bus_id];
+            const gps = d.satellites == null ? "—"
+                : AT("{count} satellites", { count: d.satellites }) + (d.hdop != null ? " · " + AT("HDOP {hdop}", { hdop: d.hdop }) : "");
+            const power = [d.rssi_dbm != null ? `${d.rssi_dbm} dBm` : "", d.battery_v != null ? `${d.battery_v} V` : ""].filter(Boolean).join(" · ") || "—";
+            const details = [d.device_id, AT("key …{hint}", { hint: d.key_hint }),
+                d.chip_id ? AT("chip {chip}", { chip: d.chip_id }) : "",
+                d.firmware ? AT("firmware {version}", { version: d.firmware }) : ""].filter(Boolean).join(" · ");
+            const canView = d.show_on_map && bus && d.status === "online";
+            return `<tr class="${d.show_on_map ? "" : "row-muted"}">
+                <td class="col-device">
+                    <div class="cell-title">${esc(d.name)}</div>
+                    <div class="cell-sub">${esc(details)}</div>
+                </td>
+                <td>${bus ? `<span class="bus-tag" style="--bus-color:${esc(bus.color_hex)}">${esc(bus.bus_number)}</span>`
+                          : `<span class="muted">${esc(AT("Not fitted to a bus"))}</span>`}</td>
+                <td>
+                    <span class="status-pill status-${esc(d.status)}">${esc(deviceStatusText(d.status))}</span>
+                    <div class="cell-sub">${esc(AT("Last report {ago}", { ago: agoText(d.last_seen_ts) }))}</div>
+                </td>
+                <td class="nowrap">
+                    <div>${esc(gps)}</div>
+                    <div class="cell-sub">${esc(power)}</div>
+                </td>
+                <td>
+                    <div class="map-cell">
+                        <span class="status-pill ${d.show_on_map ? "status-on-map" : "status-off-map"}">${esc(d.show_on_map ? AT("On the map") : AT("Off the map"))}</span>
+                        <button class="btn btn-secondary btn-sm" data-device-action="map" data-device-id="${esc(d.device_id)}" ${bus ? "" : "disabled"}>${esc(d.show_on_map ? AT("Remove from map") : AT("Show on map"))}</button>
+                    </div>
+                </td>
+                <td class="col-actions">
+                    <div class="row-actions">
+                        ${canView ? `<button class="btn btn-secondary btn-sm" data-device-action="view" data-device-id="${esc(d.device_id)}">${esc(AT("View live"))}</button>` : ""}
+                        <button class="btn btn-secondary btn-sm" data-device-action="edit" data-device-id="${esc(d.device_id)}">${esc(AT("Edit"))}</button>
+                        <button class="btn btn-secondary btn-sm" data-device-action="key" data-device-id="${esc(d.device_id)}" title="${esc(AT("Make a new key (the old one stops working)"))}">${esc(AT("New key"))}</button>
+                        <button class="btn btn-secondary btn-sm btn-danger-text" data-device-action="delete" data-device-id="${esc(d.device_id)}">${esc(AT("Delete"))}</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join("");
+    }
+    renderWaitingBoxes();
+}
+
+/**
+ * The boxes asking to join. Rows are kept (not redrawn) while they stay in the list,
+ * so a name the admin is typing isn't wiped by the refresh every few seconds.
+ */
+function renderWaitingBoxes() {
+    const body = document.getElementById("waiting-rows");
+    if (!body) return;
+    const emptyRow = body.querySelector(".waiting-empty");
+    if (!waitingBoxes.length) {
+        if (!emptyRow) body.innerHTML = `<tr class="waiting-empty"><td colspan="6" class="empty-row">${esc(AT("No box is waiting."))}</td></tr>`;
+        return;
+    }
+    emptyRow?.remove();
+    const wanted = new Set(waitingBoxes.map(w => w.chip_id));
+    body.querySelectorAll("tr[data-chip]").forEach(tr => { if (!wanted.has(tr.dataset.chip)) tr.remove(); });
+    for (const box of waitingBoxes) {
+        let tr = body.querySelector(`tr[data-chip="${CSS.escape(box.chip_id)}"]`);
+        if (!tr) {
+            tr = document.createElement("tr");
+            tr.dataset.chip = box.chip_id;
+            const suggestedBus = box.known_device_id ? (gpsDevices.find(d => d.device_id === box.known_device_id)?.bus_id || "") : (nextFreeBus || "");
+            tr.innerHTML = `
+                <td>
+                    <div class="cell-title mono">${esc(box.chip_id)}</div>
+                    <div class="cell-sub waiting-sub"></div>
+                </td>
+                <td><span class="pair-code">${esc(box.code)}</span></td>
+                <td class="nowrap waiting-asked"></td>
+                <td><input type="text" class="custom-input input-sm waiting-name" maxlength="60" placeholder="${esc(AT("Made for you if empty"))}" value="${esc(box.known_device_name || "")}"></td>
+                <td><select class="custom-select input-sm waiting-bus">${deviceBusOptions(suggestedBus, box.known_device_id)}</select></td>
+                <td style="text-align:right;">
+                    <div class="row-actions">
+                        <button class="btn btn-primary btn-sm" data-waiting-action="approve">${esc(AT("Approve"))}</button>
+                        <button class="btn btn-secondary btn-sm btn-danger-text" data-waiting-action="reject">${esc(AT("Reject"))}</button>
+                    </div>
+                </td>`;
+            body.appendChild(tr);
+        }
+        const sub = [box.ip, box.firmware ? AT("firmware {version}", { version: box.firmware }) : "",
+            box.known_device_name ? AT("joined before as {name}", { name: box.known_device_name }) : ""].filter(Boolean).join(" · ");
+        tr.querySelector(".waiting-sub").textContent = sub;
+        tr.querySelector(".waiting-asked").textContent = agoText(box.first_seen);
+    }
+}
+
+document.getElementById("device-rows")?.addEventListener("click", (e) => {
+    const button = e.target.closest("[data-device-action]");
+    if (!button) return;
+    const device = gpsDevices.find(d => d.device_id === button.dataset.deviceId);
+    if (!device) return;
+    const action = button.dataset.deviceAction;
+    if (action === "edit") openDeviceModal(device);
+    else if (action === "key") renewDeviceKey(device);
+    else if (action === "delete") deleteDevice(device);
+    else if (action === "map") setDeviceOnMap(device, !device.show_on_map, button);
+    else if (action === "view") viewDeviceLive(device);
 });
 
-/** Frees a driver account that is stuck on another phone. */
-async function unlockDriver(driverId, name) {
-    if (!confirm(AT("Sign {name} out of their device so they can log in again?", { name }))) return;
-    const { ok, data } = await api("POST", `/api/admin/drivers/${encodeURIComponent(driverId)}/unlock`);
-    if (ok) location.reload(); else toast(data.message || AT("Could not unlock."), true);
+document.getElementById("waiting-rows")?.addEventListener("click", async (e) => {
+    const button = e.target.closest("[data-waiting-action]");
+    const tr = button?.closest("tr[data-chip]");
+    if (!tr) return;
+    const chip = tr.dataset.chip;
+    const url = `/api/admin/devices/waiting/${encodeURIComponent(chip)}/${button.dataset.waitingAction}`;
+    if (button.dataset.waitingAction === "reject") {
+        if (!confirm(AT("Reject box {chip}? It is ignored for an hour.", { chip }))) return;
+        button.disabled = true;
+        const { ok, data } = await api("POST", url);
+        toast(data.message || (ok ? "" : AT("Something went wrong.")), !ok);
+    } else {
+        button.disabled = true;
+        const { ok, data } = await api("POST", url, {
+            name: tr.querySelector(".waiting-name").value.trim(),
+            bus_id: tr.querySelector(".waiting-bus").value
+        });
+        toast(data.message || (ok ? "" : AT("Something went wrong.")), !ok);
+        if (ok) document.getElementById("waiting-rows").innerHTML = "";   // rebuild: the free buses changed
+    }
+    button.disabled = false;
+    refreshDevices(true);
+});
+
+/** Asks the server for the devices' latest reports and waiting boxes (only while their tab is open). */
+async function refreshDevices(force = false) {
+    if (!force && !document.getElementById("tab-devices")?.classList.contains("active")) return;
+    try {
+        const { ok, data } = await api("GET", "/api/admin/devices");
+        if (ok) {
+            gpsDevices = data.devices || [];
+            waitingBoxes = data.waiting || [];
+            nextFreeBus = data.next_free_bus || null;
+            if (data.now) serverOffset = data.now - Date.now() / 1000;
+        }
+    } catch (e) { /* offline for a moment: keep the last list */ }
+    renderDevices();
+}
+renderDevices();
+refreshDevices(true);
+setInterval(refreshDevices, DEVICE_REFRESH_MS);
+
+// "Manually" / "Automatically"
+document.querySelectorAll("[data-add-mode]").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-add-mode]").forEach(b => {
+        b.classList.toggle("active", b === btn);
+        b.setAttribute("aria-selected", String(b === btn));
+    });
+    document.getElementById("add-mode-manual").hidden = btn.dataset.addMode !== "manual";
+    document.getElementById("add-mode-auto").hidden = btn.dataset.addMode !== "auto";
+}));
+
+/** The manual form starts on the first bus without a device. */
+function resetAddDeviceForm() {
+    const fitted = new Set(gpsDevices.map(d => d.bus_id));
+    const free = ADMIN_DATA.buses.find(b => !fitted.has(b.bus_id));
+    document.getElementById("add-device-name").value = "";
+    document.getElementById("add-device-bus").value = free ? free.bus_id : "";
+    showFormError("add-device-error", "");
+}
+resetAddDeviceForm();
+
+document.getElementById("form-add-device").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("add-device-name").value.trim();
+    if (!name) {
+        showFormError("add-device-error", AT("Give the device a name."));
+        return;
+    }
+    const { ok, data } = await api("POST", "/api/admin/devices", { name, bus_id: document.getElementById("add-device-bus").value });
+    if (!ok) {
+        showFormError("add-device-error", data.message || AT("Could not save the device."));
+        return;
+    }
+    resetAddDeviceForm();
+    showDeviceSettings(data.device, data.settings);
+    refreshDevices(true);
+});
+
+document.getElementById("quick-add-btn").addEventListener("click", async (e) => {
+    e.currentTarget.disabled = true;
+    const { ok, data } = await api("POST", "/api/admin/devices/quick");
+    e.currentTarget.disabled = false;
+    if (!ok) { toast(data.message || AT("Could not save the device."), true); return; }
+    showDeviceSettings(data.device, data.settings);
+    refreshDevices(true);
+});
+
+/** Puts a device's bus on every map, or takes it off (the box stays connected). */
+async function setDeviceOnMap(device, show, button) {
+    if (!show && !confirm(AT("Remove {name} from the map? Its bus disappears from every map until you show it again.", { name: device.name }))) return;
+    button.disabled = true;
+    const { ok, data } = await api("PUT", `/api/admin/devices/${encodeURIComponent(device.device_id)}/map`, { show });
+    toast(data.message || (ok ? "" : AT("Something went wrong.")), !ok);
+    refreshDevices(true);
 }
 
-/** Deletes a driver after asking to confirm. */
-async function deleteDriver(driverId, name) {
-    if (!confirm(AT("Delete driver {name}?", { name }))) return;
-    const { ok, data } = await api("DELETE", `/api/admin/drivers/${encodeURIComponent(driverId)}`);
-    if (ok) location.reload(); else toast(data.message || AT("Could not delete."), true);
+/** Opens the Live map on this device's bus. */
+function viewDeviceLive(device) {
+    switchTab("live");
+    const helper = window.googleMapsHelper;
+    let tries = 0;
+    const focus = () => {
+        const bus = window.adminLive?.buses.get(device.bus_id);
+        if (bus && bus.is_active) helper.fitToPoints([[bus.current_latitude, bus.current_longitude]], 24);
+        else if (++tries < 20) setTimeout(focus, 250);
+    };
+    focus();
+}
+
+/** Opens the Edit device form. */
+function openDeviceModal(device) {
+    showFormError("device-form-error", "");
+    document.getElementById("device-modal-title").textContent = AT("Edit {name}", { name: device.name });
+    document.getElementById("device-id").value = device.device_id;
+    document.getElementById("device-name").value = device.name;
+    document.getElementById("device-bus").value = device.bus_id || "";
+    openModal("modal-device");
+    setTimeout(() => document.getElementById("device-name").focus(), 50);
+}
+
+document.getElementById("form-device").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("device-id").value;
+    const payload = {
+        name: document.getElementById("device-name").value.trim(),
+        bus_id: document.getElementById("device-bus").value
+    };
+    const { ok, data } = await api("PUT", `/api/admin/devices/${encodeURIComponent(id)}`, payload);
+    if (!ok) {
+        showFormError("device-form-error", data.message || AT("Could not save the device."));
+        return;
+    }
+    closeModal("modal-device");
+    location.reload();
+});
+
+/** Makes a new key for a device (after asking) and shows it. */
+async function renewDeviceKey(device) {
+    if (!confirm(AT("Make a new key for {name}? The old key stops working at once, so the device must be updated.", { name: device.name }))) return;
+    const { ok, data } = await api("POST", `/api/admin/devices/${encodeURIComponent(device.device_id)}/key`);
+    if (ok) showDeviceSettings(data.device, data.settings);
+    else toast(data.message || AT("Something went wrong."), true);
+}
+
+/** Deletes a device after asking to confirm. */
+async function deleteDevice(device) {
+    if (!confirm(AT("Delete {name}? Its key stops working and its bus goes offline.", { name: device.name }))) return;
+    const { ok, data } = await api("DELETE", `/api/admin/devices/${encodeURIComponent(device.device_id)}`);
+    if (ok) location.reload(); else toast(data.message || AT("Could not delete the device."), true);
+}
+
+/** The settings for the device's firmware: server URL, its key and a ready secrets.h. Shown once. */
+function showDeviceSettings(device, settings) {
+    const url = settings.lan_url || settings.server_url;
+    document.getElementById("device-key-title").textContent = AT("Device settings · {name}", { name: device.name });
+    document.getElementById("device-url").textContent = url;
+    document.getElementById("device-key").textContent = settings.key;
+    const lanNote = document.getElementById("device-lan-note");
+    lanNote.hidden = !settings.lan_url;
+    lanNote.textContent = settings.lan_url
+        ? AT("This computer calls itself \"localhost\", which the ESP32 can't reach, so its network address is used instead. Start BusPlus with HOST=0.0.0.0 so the ESP32 can connect (see firmware/README.md).")
+        : "";
+    document.getElementById("device-secrets").textContent = [
+        `// BusPlus GPS box: ${device.name} (${device.device_id})`,
+        `#define WIFI_SSID      "your-wifi-name"`,
+        `#define WIFI_PASSWORD  "your-wifi-password"`,
+        `#define SERVER_URL     "${url}"`,
+        `#define DEVICE_KEY     "${settings.key}"`
+    ].join("\n");
+    if (settings.key) toast(AT("Device saved. Copy its key now."));
+    openModal("modal-device-key");
+}
+
+/** Copies the text of an element (URL, key, secrets.h) to the clipboard. */
+async function copyText(elementId) {
+    const text = document.getElementById(elementId).textContent;
+    try {
+        await navigator.clipboard.writeText(text);
+        toast(AT("Copied"));
+    } catch (e) {
+        toast(text);
+    }
 }
 
 // ---------- Routes (map editor) ----------
@@ -234,7 +522,7 @@ function drawRoute(roadFailed = false) {
     });
     L.marker(destLatLng(), {
         interactive: false,
-        icon: L.divIcon({ className: "route-dest-marker", html: `<div>🏁 ${esc(ADMIN_DATA.destination.stop_name)}</div>`, iconSize: [110, 22], iconAnchor: [12, 22] })
+        icon: L.divIcon({ className: "route-dest-marker", html: `<div>${esc(ADMIN_DATA.destination.stop_name)}</div>`, iconSize: [110, 22], iconAnchor: [12, 22] })
     }).addTo(routeLayer);
 
     if (!editPoints.length) setRouteInfo(AT("Click the map where the route starts."));
@@ -303,7 +591,7 @@ function showSuggest(input, onPick) {
     suggestBox.innerHTML = items.map((p, i) => {
         const n = p.name, at = n.toLowerCase().indexOf(q.toLowerCase());
         const label = at < 0 ? esc(n) : esc(n.slice(0, at)) + "<mark>" + esc(n.slice(at, at + q.length)) + "</mark>" + esc(n.slice(at + q.length));
-        return `<div class="place-option" role="option" data-i="${i}"><span class="place-pin">📍</span><span>${label}</span></div>`;
+        return `<div class="place-option" role="option" data-i="${i}"><span>${label}</span></div>`;
     }).join("");
     const r = input.getBoundingClientRect();
     suggestBox.style.left = `${r.left}px`;
@@ -414,14 +702,14 @@ async function deleteRoute(routeId, name) {
 }
 
 // ---------- Buses ----------
-/** Bus table: sends a bus on another route today (its driver sees "Changed today"). */
+/** Bus table: sends a bus on another route today. */
 async function changeBusRoute(select) {
     const busId = select.dataset.busId;
     const previous = select.dataset.current;
     const { ok, data } = await api("PUT", `/api/admin/buses/${encodeURIComponent(busId)}`, { assigned_route_id: select.value });
     if (ok) {
         select.dataset.current = select.value;
-        toast(AT("{bus} → {route}. Its driver has been notified.", { bus: data.bus.bus_number, route: select.selectedOptions[0].textContent }));
+        toast(AT("{bus} now drives {route}.", { bus: data.bus.bus_number, route: select.selectedOptions[0].textContent }));
     } else {
         select.value = previous;
         toast(data.message || AT("Could not change the route."), true);
@@ -471,7 +759,7 @@ function openBusModal(bus) {
     document.getElementById("bus-plate").value = editing ? (bus.license_plate || "") : "";
     document.getElementById("bus-capacity").value = editing ? bus.capacity : ADMIN_DATA.default_bus_seats;
     if (editing) document.getElementById("bus-route-id").value = bus.assigned_route_id;
-    const firstType = Object.keys(ADMIN_DATA.rider_types)[0];
+    const firstType = ADMIN_DATA.default_rider_type;
     const aud = editing && ADMIN_DATA.rider_types[bus.audience] ? bus.audience : firstType;
     document.querySelectorAll('input[name="bus-audience"]').forEach(r => { r.checked = r.value === aud; });
     const used = new Set(ADMIN_DATA.buses.map(b => (b.color_hex || "").toUpperCase()));
@@ -545,7 +833,7 @@ function addTripRow(part, trip = { bus_id: "", time: "" }) {
     row.innerHTML = `
         <select class="custom-select trip-bus" aria-label="${esc(AT("Bus"))}">${busOptions(scheduleRouteId, trip.bus_id)}</select>
         <input type="time" class="custom-input trip-time" aria-label="${esc(AT("Time"))}">
-        <button type="button" class="trip-remove" aria-label="${esc(AT("Remove"))}">✕</button>`;
+        <button type="button" class="trip-remove">${esc(AT("Remove"))}</button>`;
     row.querySelector(".trip-time").value = trip.time;
     row.querySelector(".trip-remove").addEventListener("click", () => { row.remove(); storeScheduleDay(); updateDayCounts(); });
     row.querySelectorAll("select, input").forEach(field => field.addEventListener("change", () => { storeScheduleDay(); updateDayCounts(); }));
@@ -616,6 +904,7 @@ function startLiveMap() {
         setTimeout(() => helper.leafletMap?.invalidateSize(), 50);    // the tab was hidden: re-measure
         return;
     }
+    helper.plainMarkers = true;                 // plain dots with the bus number, text layer buttons
     helper.initMap("admin-live-map");
     helper.drawRoutes(ADMIN_DATA.routes);
     helper.fitToPoints(helper.getRoutePoints(null), 24);
@@ -654,38 +943,4 @@ function renderLiveList(live) {
         const bus = window.adminLive.buses.get(el.dataset.bus);
         if (bus) helper.fitToPoints([[bus.current_latitude, bus.current_longitude]], 24);
     }));
-}
-
-// ---------- Background GPS (Traccar Client) ----------
-let trackerDriverId = null;
-
-/** Shows the Traccar Client settings (server URL + secret key) for one driver. */
-async function openTrackerModal(driverId, name, renew = false) {
-    trackerDriverId = driverId;
-    document.getElementById("tracker-modal-title").textContent = AT("Background GPS · {name}", { name });
-    const { ok, data } = await api("POST", `/api/admin/drivers/${encodeURIComponent(driverId)}/tracker`, { renew });
-    if (!ok) { toast(data.message || AT("Something went wrong."), true); return; }
-    document.getElementById("tracker-url").textContent = data.server_url;
-    document.getElementById("tracker-key").textContent = data.key;
-    if (data.message) toast(data.message);
-    openModal("modal-tracker");
-}
-
-/** Replaces the driver's key (after asking): the old key stops working at once. */
-function renewTrackerKey() {
-    if (!trackerDriverId) return;
-    if (!confirm(AT("Make a new key? The driver must then enter the new one in the app."))) return;
-    const name = document.getElementById("tracker-modal-title").textContent.split(" · ").slice(1).join(" · ");
-    openTrackerModal(trackerDriverId, name, true);
-}
-
-/** Copies the server URL or key to the clipboard. */
-async function copyTracker(elementId) {
-    const text = document.getElementById(elementId).textContent;
-    try {
-        await navigator.clipboard.writeText(text);
-        toast(AT("Copied"));
-    } catch (e) {
-        toast(text);
-    }
 }

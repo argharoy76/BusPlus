@@ -1185,7 +1185,7 @@ class StudentTracker {
             </button>`;
     }
 
-    /** Bus details: speed, next stop, route and driver. */
+    /** Bus details: speed, next stop, route and seats. */
     busDetailHtml(bus, route) {
         const live = !!bus.is_active;
         const cell = (label, value) => `
@@ -1199,7 +1199,7 @@ class StudentTracker {
                     ${cell(RT("Speed"), live ? escapeHtml(RT("{speed} km/h", { speed: Math.round(bus.speed_kmh || 0) })) : "--")}
                     ${cell(RT("Next stop"), live ? escapeHtml(bus.next_stop_name || "--") : "--")}
                     ${cell(RT("Route"), escapeHtml(route ? route.route_name : bus.assigned_route_id))}
-                    ${cell(RT("Driver"), escapeHtml(bus.driver_name || "--"))}
+                    ${cell(RT("Seats"), escapeHtml(bus.capacity ? String(bus.capacity) : "--"))}
                 </div>
             </div>`;
     }

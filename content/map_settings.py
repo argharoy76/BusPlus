@@ -17,7 +17,7 @@ FINAL_DESTINATION = {
 # A rider's Home stop before they choose their own (menu > Home on the student / teacher map).
 DEFAULT_HOME = {"stop_name": "Malabotha More", "latitude": 22.7725, "longitude": 89.5855}
 
-# Local time zone (used for "today" on the driver's duty card and arrival clock times).
+# Local time zone (used for "today" in the bus schedule and arrival clock times).
 TIMEZONE = "Asia/Dhaka"
 
 # Rough box around the country. Route points and GPS outside it are refused (catches typos).

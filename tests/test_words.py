@@ -18,7 +18,6 @@ ROOT = Path(__file__).resolve().parent.parent
 # Which look-up name each JavaScript file uses, and for which page.
 JS_FILES = {
     "static/js/student_tracker.js": ("RT", "rider_map"),
-    "static/js/driver_tracker.js": ("DT", "driver_map"),
     "static/js/google_maps_helper.js": ("MT", "map"),
     "static/js/schedule.js": ("ST", "bus_schedule"),
     "static/js/admin.js": ("AT", "backend"),

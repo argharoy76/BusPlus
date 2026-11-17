@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set t = words("backend_login") %}
-{% from "_ui.html" import logo with context %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,7 +32,7 @@
             padding: 28px 24px;
             box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
         }
-        .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+        .brand { margin-bottom: 22px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
         h1 { margin: 0; font-size: 1.15rem; font-weight: 800; }
         .sub { margin: 2px 0 0; font-size: 0.8rem; color: #64748b; }
         label { display: block; font-size: 0.78rem; font-weight: 700; margin: 0 0 6px; color: #334155; }
@@ -47,6 +46,20 @@
             background: var(--bp-brand); color: #fff; font: inherit; font-weight: 800; font-size: 0.95rem; cursor: pointer;
         }
         button:disabled { opacity: 0.6; cursor: default; }
+        .password-box { position: relative; margin-bottom: 14px; }
+        .password-box input { margin-bottom: 0; padding-right: 70px; }
+        .eye {
+            position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+            width: auto; height: 32px; margin: 0; padding: 0 10px; border-radius: 8px;
+            background: transparent; color: #475569; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+        }
+        .eye:hover, .eye:focus-visible { background: #f1f5f9; color: #0f172a; outline: none; }
+        .dev-hint {
+            margin: 16px 0 0; padding: 10px 12px; border-radius: 10px; background: #f8fafc;
+            border: 1px dashed #cbd5e1; color: #475569; font-size: 0.78rem; line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+        .dev-hint code { font-size: 0.76rem; color: #0f172a; }
         .error {
             display: none; margin-bottom: 14px; padding: 10px 12px; border-radius: 10px;
             background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 0.84rem; font-weight: 600;
@@ -56,11 +69,8 @@
 <body>
     <form class="card" id="admin-login-form" autocomplete="on">
         <div class="brand">
-            {{ logo("sm") }}
-            <div>
-                <h1>{{ t("{app} Backend", app=brand.APP_NAME) }}</h1>
-                <p class="sub">{{ t("Admin only") }}</p>
-            </div>
+            <h1>{{ t("{app} Backend", app=brand.APP_NAME) }}</h1>
+            <p class="sub">{{ t("Admin only") }}</p>
         </div>
 
         <div class="error" id="login-error" role="alert"></div>
@@ -69,15 +79,40 @@
         <input type="text" id="username" name="username" autocomplete="username" required autofocus>
 
         <label for="password">{{ t("Password") }}</label>
-        <input type="password" id="password" name="password" autocomplete="current-password" required>
+        <div class="password-box">
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+            <button type="button" class="eye" id="toggle-password" aria-pressed="false"
+                    aria-label="{{ t("Show password") }}" title="{{ t("Show password") }}"
+                    data-show="{{ t("Show password") }}" data-hide="{{ t("Hide password") }}"
+                    data-show-text="{{ t("Show") }}" data-hide-text="{{ t("Hide") }}">{{ t("Show") }}</button>
+        </div>
 
         <button type="submit" id="login-btn">{{ t("Sign in") }}</button>
+
+        {% if password_file %}
+        {# Only on your own computer (never on the live server): which file holds the password #}
+        <p class="dev-hint">{{ t("On this computer the password is in:") }}<br><code>{{ password_file }}</code></p>
+        {% endif %}
     </form>
 
     <script>
         const form = document.getElementById("admin-login-form");
         const errorBox = document.getElementById("login-error");
         const btn = document.getElementById("login-btn");
+        const passwordInput = document.getElementById("password");
+        const eye = document.getElementById("toggle-password");
+
+        // Eye button: show or hide the password while typing
+        eye.addEventListener("click", () => {
+            const show = passwordInput.type === "password";
+            passwordInput.type = show ? "text" : "password";
+            eye.setAttribute("aria-pressed", String(show));
+            const label = show ? eye.dataset.hide : eye.dataset.show;
+            eye.setAttribute("aria-label", label);
+            eye.title = label;
+            eye.textContent = show ? eye.dataset.hideText : eye.dataset.showText;
+            passwordInput.focus();
+        });
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -89,7 +124,7 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         username: document.getElementById("username").value.trim(),
-                        password: document.getElementById("password").value
+                        password: passwordInput.value.trim()
                     })
                 });
                 const data = await resp.json();

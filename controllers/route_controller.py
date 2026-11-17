@@ -30,7 +30,7 @@ def list_schedules():
     """
     TODAY's timetable of every route for the "Bus schedule" pop-up: morning buses with the
     time they reach the campus, afternoon buses with the time they leave it.
-    ?audience=student|teacher|... leaves out buses meant for another group (drivers see all).
+    ?audience=student|teacher|... leaves out buses meant for another group (no audience: every bus).
     """
     return ok(**schedule_service.todays_schedules(audience_arg()))
 
@@ -42,7 +42,7 @@ def check_arrival():
 
     Query: route_id, stop_name - the rider's stop
            bus_id (optional)   - watch this bus (its own route is then used)
-           audience (optional) - only consider student or teacher buses
+           audience (optional) - only consider that rider type's buses
            alert_threshold_minutes (optional) - "notify me N minutes before"
     Answers {"alert": null} when that rider type has no bus on the route.
     """

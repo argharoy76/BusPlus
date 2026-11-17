@@ -28,25 +28,25 @@ def test_parked_bus_with_gps_wobble_shows_zero_and_does_not_move():
     assert len(shown) == 1                                # the marker stays put
 
 
-def test_parked_bus_ignores_small_phone_speed_noise():
+def test_parked_bus_ignores_small_gps_speed_noise():
     meter, t0 = Speedometer(), time.time()
     for i in range(10):
-        r = meter.update(*_offset(*START, i % 2 * 3, 0), accuracy_m=10, phone_speed_kmh=4.0, fix_time=t0 + i)
+        r = meter.update(*_offset(*START, i % 2 * 3, 0), accuracy_m=10, gps_speed_kmh=4.0, fix_time=t0 + i)
     assert r.speed_kmh == 0
 
 
 def test_moving_bus_speed_from_positions():
     meter, t0 = Speedometer(), time.time()
-    for i in range(20):                                   # 30 km/h = 8.33 m/s, no phone speed
+    for i in range(20):                                   # 30 km/h = 8.33 m/s, no GPS speed
         r = meter.update(*_offset(*START, 8.333 * i, 0), accuracy_m=8, fix_time=t0 + i)
     assert 28 <= r.speed_kmh <= 32
     assert abs(r.heading_deg - 0) < 2                     # driving north
 
 
-def test_moving_bus_uses_phone_speed():
+def test_moving_bus_uses_gps_speed():
     meter, t0 = Speedometer(), time.time()
     for i in range(10):
-        r = meter.update(*_offset(*START, 11.1 * i, 0), accuracy_m=5, phone_speed_kmh=40.0, fix_time=t0 + i)
+        r = meter.update(*_offset(*START, 11.1 * i, 0), accuracy_m=5, gps_speed_kmh=40.0, fix_time=t0 + i)
     assert r.speed_kmh == 40.0
 
 
@@ -68,14 +68,11 @@ def test_very_inaccurate_fix_is_ignored():
     assert not r.use_fix and (r.latitude, r.longitude) == START
 
 
-def test_driver_phone_parked_shows_zero_on_the_map(driver_login):
-    """End to end: a parked phone sending wobbly fixes every second shows 0 km/h to riders."""
-    browser, _ = driver_login()
-    browser.post("/api/driver/trip/start", json={})
-    rng, t0 = random.Random(7), time.time() * 1000
-    for i in range(12):
+def test_parked_gps_box_shows_zero_on_the_map(gps_box):
+    """End to end: a parked bus whose GPS box sends wobbly fixes every second shows 0 km/h to riders."""
+    rng = random.Random(7)
+    for _ in range(12):
         lat, lng = _offset(*START, rng.uniform(-5, 5), rng.uniform(-5, 5))
-        bus = browser.post("/api/driver/location", json={
-            "latitude": lat, "longitude": lng, "speed_kmh": None, "accuracy_m": 10, "fix_time": t0 + i * 1000,
-        }).get_json()["bus"]
-    assert bus["speed_kmh"] == 0
+        assert gps_box(lat=lat, lng=lng, speed_kmh=rng.uniform(0, 1.5), hdop=2.0).status_code == 200
+    from services import tracking
+    assert tracking.get_bus("KU-BUS-01").to_dict()["speed_kmh"] == 0

@@ -50,7 +50,7 @@ def test_trail_gap_follows_the_road_not_a_straight_line(app):
         tracking.start_trip(bus_id)
         t0 = time.time()
         tracking.update_location(bus_id, *line[2], speed_kmh=30, accuracy_m=5, fix_time=t0)
-        tracking.update_location(bus_id, *line[30], speed_kmh=30, accuracy_m=5, fix_time=t0 + 20)  # phone was off
+        tracking.update_location(bus_id, *line[30], speed_kmh=30, accuracy_m=5, fix_time=t0 + 20)  # GPS box was off
         trail = next(b for b in tracking.all_buses() if b["bus_id"] == bus_id)["trail"]
         assert len(trail) > 10                                 # the road between, not 2 points
         road = {(round(lat, 5), round(lng, 5)) for lat, lng in line}

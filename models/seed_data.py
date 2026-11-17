@@ -1,14 +1,13 @@
 """
-Turns the starting data in content/starting_data.py into routes, buses and drivers.
+Turns the starting data in content/starting_data.py into routes and buses.
 Used once, when the database is empty (see services/store.py: seed_defaults).
 """
 
-from content.starting_data import BUSES, DEMO_DRIVER_PIN, DEMO_DRIVERS, ROUTES
+from content.starting_data import BUSES, ROUTES
 from models.bus import Bus
 from models.rider_types import DEFAULT_RIDER_KEY
 from models.route import BusRoute, BusStop
 from models.route_paths import ROAD_PATHS
-from models.user import DriverUser
 
 
 def default_routes() -> list[BusRoute]:
@@ -43,14 +42,3 @@ def default_buses() -> list[Bus]:
             assigned_route_id=route_id, color_hex=color, capacity=capacity, audience=DEFAULT_RIDER_KEY)
         for bus_id, number, name, plate, route_id, color, capacity in BUSES
     ]
-
-
-def demo_drivers() -> list[DriverUser]:
-    """Four demo drivers, one per bus, all with PIN 1234 (for trying the app out only)."""
-    drivers = []
-    for driver_id, username, full_name, phone, bus_id in DEMO_DRIVERS:
-        driver = DriverUser(driver_id=driver_id, username=username, full_name=full_name,
-                            pin_hash="", phone=phone, assigned_bus_id=bus_id)
-        driver.set_pin(DEMO_DRIVER_PIN)
-        drivers.append(driver)
-    return drivers

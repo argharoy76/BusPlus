@@ -71,5 +71,5 @@ WORDS = {
     "{speed} km/h": "{speed} km/h",
     "Next stop": "Next stop",
     "Route": "Route",
-    "Driver": "Driver",
+    "Seats": "Seats",
 }

@@ -2,27 +2,46 @@
 Sign-in and sign-out for everyone.
 
   * Admin:    username + password, only for the backend (/backend).
-  * Driver:   name + their bus's route + PIN set by the admin; front end only.
-  * Riders (students, teachers, ... see content/user_types.py): name + ID, no password.
+  * Riders (students, teachers, staff ... see content/user_types.py): name + ID, no password.
 
-Login endpoints are rate-limited per IP address (Flask-Limiter) to stop
-password/PIN guessing.
+(Buses report their own position from a GPS box - see controllers/device_controller.py.)
+
+Login endpoints are rate-limited per IP address (Flask-Limiter) to stop password guessing.
 """
 
 import hmac
+import re
+import time
 
-from flask import Blueprint, current_app, redirect, request, session, url_for
+from flask import Blueprint, current_app, redirect, session, url_for
 
-from config import Config
 from content import rules
 from controllers.helpers import fail, json_body, ok
 from extensions import limiter
 from models.rider_types import rider_info
-from services import store, tracking, users
-from services.user_service import LoginError, new_session_token
+from services import store
 from services.words import say
 
 auth_bp = Blueprint("auth", __name__)
+
+# A rider ID: letters, digits and - _ / . (e.g. "190212", "KU-2021-033").
+RIDER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-_/.]{0,39}$")
+# Not allowed in a name: links, code-like symbols and digits (names in any language are fine).
+NAME_REFUSED_RE = re.compile(r"[<>{}\[\]\\/@#$%^*=+|~`\"\d]|https?:|www\.", re.IGNORECASE)
+
+
+def _real_name(name: str) -> bool:
+    """True for something that looks like a person's name (any language): letters, spaces and . ' -"""
+    return (any(c.isalpha() for c in name) and all(c.isprintable() for c in name)
+            and not NAME_REFUSED_RE.search(name))
+
+
+def admin_signed_in() -> bool:
+    """True while the backend admin is signed in, and for at most ADMIN_SESSION_HOURS after signing in."""
+    since = session.get("admin_since")
+    if not session.get("is_admin") or not isinstance(since, (int, float)):
+        return False
+    return time.time() - since < rules.ADMIN_SESSION_HOURS * 3600
 
 
 def _start_fresh_session(keep_admin: bool = True) -> None:
@@ -30,9 +49,10 @@ def _start_fresh_session(keep_admin: bool = True) -> None:
     Forget any previous sign-in in this browser. Keeps the page's CSRF token (so
     the open page keeps working) and, unless told otherwise, the backend admin sign-in.
     """
-    kept = {key: session[key] for key in ("csrf_token", "is_admin") if key in session}
+    kept = {key: session[key] for key in ("csrf_token", "is_admin", "admin_since") if key in session}
     if not keep_admin:
         kept.pop("is_admin", None)
+        kept.pop("admin_since", None)
     session.clear()
     session.update(kept)
 
@@ -45,75 +65,30 @@ def _start_fresh_session(keep_admin: bool = True) -> None:
 def admin_login():
     """Sign the admin in. Compares in constant time so the password can't be guessed by timing."""
     data = json_body()
-    username = str(data.get("username") or "").strip()
-    password = str(data.get("password") or "")
-    expected_password = current_app.config["ADMIN_PASSWORD"] or ""
-    good_user = hmac.compare_digest(username.encode(), current_app.config["ADMIN_USERNAME"].encode())
+    # Spaces before / after are ignored (they sneak in when copying); the username is not case-sensitive.
+    username = str(data.get("username") or "").strip().lower()
+    password = str(data.get("password") or "").strip()
+    expected_password = (current_app.config["ADMIN_PASSWORD"] or "").strip()
+    good_user = hmac.compare_digest(username.encode(), current_app.config["ADMIN_USERNAME"].strip().lower().encode())
     good_pass = hmac.compare_digest(password.encode(), expected_password.encode())
     if not (good_user and good_pass and expected_password):
         return fail(say("Wrong username or password."), 401)
     _start_fresh_session(keep_admin=False)
     session["is_admin"] = True
+    session["admin_since"] = time.time()           # signed out by itself after ADMIN_SESSION_HOURS
     return ok(redirect_url=url_for("admin.portal"))
 
 
-@auth_bp.route("/backend/logout", methods=["GET", "POST"])
+@auth_bp.post("/backend/logout")
 def admin_logout():
-    """Sign the admin out of the backend."""
+    """Sign the admin out of the backend (POST with the page's CSRF token, so other sites can't do it)."""
     session.pop("is_admin", None)
+    session.pop("admin_since", None)
     return redirect(url_for("admin.login_page"))
 
 
 # ---------------------------------------------------------------------------
-# Drivers (front end)
-# ---------------------------------------------------------------------------
-@auth_bp.get("/api/drivers/search")
-@limiter.limit("60 per minute")
-def search_drivers():
-    """Name suggestions while a driver types on the login page: /api/drivers/search?q=raf"""
-    matches = users.search_drivers(request.args.get("q", ""))
-    for match in matches:
-        bus = tracking.get_bus(match.pop("assigned_bus_id"))
-        route = tracking.get_route(bus.assigned_route_id) if bus else None
-        match["route_id"] = route.route_id if route else None
-        match["route_name"] = route.route_name if route else None
-    return ok(count=len(matches), drivers=matches)
-
-
-@auth_bp.post("/api/auth/driver/login")
-@limiter.limit(rules.DRIVER_LOGIN_LIMIT)
-def driver_login():
-    """
-    Sign a driver in. Body: {"driver_id" or "driver_name", "route_id", "pin"}.
-    The account is then locked to this phone until the driver logs out.
-    """
-    data = json_body()
-    name_or_id = str(data.get("driver_id") or data.get("driver_name") or "").strip()
-    if not name_or_id:
-        return fail(say("Please enter or select your driver name."))
-
-    driver = users.find_driver(name_or_id)
-    bus = tracking.get_bus(driver.assigned_bus_id) if driver else None
-    token = session.get("session_token") or new_session_token()
-    try:
-        driver = users.sign_in(
-            name_or_id=name_or_id,
-            route_id=str(data.get("route_id") or "").strip(),
-            pin=str(data.get("pin") or "").strip(),
-            session_token=token,
-            bus_route_id=bus.assigned_route_id if bus else None,
-            lock_minutes=Config.DRIVER_SESSION_TIMEOUT_MINUTES,
-        )
-    except LoginError as err:
-        return fail(str(err), err.status)
-
-    _start_fresh_session()
-    session.update(role="driver", driver_id=driver.driver_id, session_token=token)
-    return ok(message=say("Welcome, {name}", name=driver.full_name), redirect_url=url_for("views.driver_dashboard"))
-
-
-# ---------------------------------------------------------------------------
-# Students, teachers and any other rider type from content/user_types.py
+# Students, teachers, staff and any other rider type from content/user_types.py
 # ---------------------------------------------------------------------------
 @auth_bp.post("/api/auth/<rider_type>/login")
 @limiter.limit(rules.RIDER_LOGIN_LIMIT)
@@ -127,9 +102,13 @@ def rider_login(rider_type: str):
         return fail(say("Not found."), 404)
     data = json_body()
     rider_id = str(data.get("rider_id") or data.get(f"{rider_type}_id") or "").strip()[:40]
-    full_name = str(data.get("full_name") or "").strip()[:60]
+    full_name = " ".join(str(data.get("full_name") or "").split())[:60]
     if not rider_id or not full_name:
         return fail(say("Please enter your name and {id_label}.", id_label=info["id_label"]))
+    if not RIDER_ID_RE.match(rider_id):
+        return fail(say("{id_label} may only use letters, numbers and - _ / .", id_label=info["id_label"]))
+    if not _real_name(full_name):
+        return fail(say("Please enter your real name (letters only)."))
     store.record_rider(rider_type, rider_id, full_name)
     _start_fresh_session()
     session.permanent = True
@@ -143,13 +122,6 @@ def rider_login(rider_type: str):
 # ---------------------------------------------------------------------------
 @auth_bp.post("/api/auth/logout")
 def logout():
-    """Sign out. A driver also goes offline and frees the account for their next login."""
-    driver_id = session.get("driver_id")
-    if driver_id:
-        driver = users.get_driver(driver_id)
-        token = session.get("session_token")
-        if driver and driver.session_token == token and driver.assigned_bus_id:
-            tracking.stop_trip(driver.assigned_bus_id)
-        users.sign_out(driver_id, token)
+    """Sign out of the rider map."""
     _start_fresh_session()
     return ok(message=say("Logged out."), redirect_url=url_for("views.landing"))

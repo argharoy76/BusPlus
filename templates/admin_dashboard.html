@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 {% set t = words("backend") %}
-{% from "_ui.html" import logo with context %}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,33 +17,41 @@
 <body>
     {% set bus_by_id = {} %}{% for b in buses %}{% set _ = bus_by_id.update({b.bus_id: b}) %}{% endfor %}
     {% set route_by_id = {} %}{% for r in routes %}{% set _ = route_by_id.update({r.route_id: r}) %}{% endfor %}
+    {% set device_by_bus = {} %}{% for d in devices if d.bus_id %}{% set _ = device_by_bus.update({d.bus_id: d}) %}{% endfor %}
 
     <div class="admin-layout">
         <!-- Sidebar -->
         <aside class="admin-sidebar">
             <div>
                 <div class="admin-brand">
-                    {{ logo("sm") }}
-                    <div>
-                        <div style="font-weight:800; font-size:1.05rem; color:#0f172a;">{{ brand.APP_NAME }}</div>
-                        <div style="font-size:0.75rem; color:#64748b;">{{ t("Backend") }}</div>
-                    </div>
+                    <div class="admin-brand-name">{{ brand.APP_NAME }}</div>
+                    <div class="admin-brand-sub">{{ t("Backend") }} · {{ brand.UNIVERSITY_NAME }}</div>
                 </div>
 
+                <div class="admin-nav-group">{{ t("Operations") }}</div>
                 <ul class="admin-nav-list">
-                    <li><div id="nav-live" class="admin-nav-item" onclick="switchTab('live')"><span>📍</span> {{ t("Live map") }}</div></li>
-                    <li><div id="nav-drivers" class="admin-nav-item active" onclick="switchTab('drivers')"><span>👨‍✈️</span> {{ t("Drivers") }}</div></li>
-                    <li><div id="nav-routes" class="admin-nav-item" onclick="switchTab('routes')"><span>🛣️</span> {{ t("Routes") }}</div></li>
-                    <li><div id="nav-buses" class="admin-nav-item" onclick="switchTab('buses')"><span>🚌</span> {{ t("Buses") }}</div></li>
-                    <li><div id="nav-schedules" class="admin-nav-item" onclick="switchTab('schedules')"><span>🕒</span> {{ t("Schedules") }}</div></li>
-                    <li><div id="nav-users" class="admin-nav-item" onclick="switchTab('users')"><span>🎓</span> {{ t("Users") }}</div></li>
+                    <li><div id="nav-live" class="admin-nav-item" onclick="switchTab('live')">{{ t("Live map") }}</div></li>
+                    <li><div id="nav-devices" class="admin-nav-item active" onclick="switchTab('devices')">{{ t("GPS devices") }}<span class="nav-count" id="nav-waiting-count" hidden></span></div></li>
+                </ul>
+                <div class="admin-nav-group">{{ t("Setup") }}</div>
+                <ul class="admin-nav-list">
+                    <li><div id="nav-routes" class="admin-nav-item" onclick="switchTab('routes')">{{ t("Routes") }}</div></li>
+                    <li><div id="nav-buses" class="admin-nav-item" onclick="switchTab('buses')">{{ t("Buses") }}</div></li>
+                    <li><div id="nav-schedules" class="admin-nav-item" onclick="switchTab('schedules')">{{ t("Schedules") }}</div></li>
+                </ul>
+                <div class="admin-nav-group">{{ t("People") }}</div>
+                <ul class="admin-nav-list">
+                    <li><div id="nav-users" class="admin-nav-item" onclick="switchTab('users')">{{ t("Users") }}</div></li>
                 </ul>
             </div>
 
             <div class="sidebar-foot">
                 <div class="signed-in-as">{{ t("Signed in as") }} <b>{{ admin_username }}</b></div>
-                <a href="{{ url_for('views.landing') }}" class="admin-nav-item" style="color:#64748b;"><span>📱</span> {{ t("Open the {app} app", app=brand.APP_NAME) }}</a>
-                <a href="{{ url_for('auth.admin_logout') }}" class="admin-nav-item" style="color:#dc2626;"><span>⎋</span> {{ t("Sign out") }}</a>
+                <a href="{{ url_for('views.landing') }}" class="admin-nav-item admin-nav-quiet">{{ t("Open the {app} app", app=brand.APP_NAME) }}</a>
+                <form method="post" action="{{ url_for('auth.admin_logout') }}" class="sign-out-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="admin-nav-item admin-nav-danger">{{ t("Sign out") }}</button>
+                </form>
             </div>
         </aside>
 
@@ -68,80 +75,122 @@
                 </div>
             </section>
 
-            <!-- ================= DRIVERS ================= -->
-            <section id="tab-drivers" class="tab-section active">
+            <!-- ================= GPS DEVICES (ESP32 + NEO-6M, one per bus) =================
+                 1. Add a device: by hand, quick add, or approve a box that asked to join by itself
+                 2. Counts
+                 3. Connected devices: status, on / off the map, edit, new key, delete
+                 Lists are filled in and refreshed every few seconds by admin.js (renderDevices) -->
+            <section id="tab-devices" class="tab-section active">
                 <div class="admin-header-row">
                     <div class="admin-title">
-                        <h2>{{ t("Drivers") }}</h2>
-                        <p>{{ t("Drivers sign in on the {app} app (not here) with the name and PIN you set.", app=brand.APP_NAME) }}</p>
+                        <h2>{{ t("GPS devices") }}</h2>
                     </div>
-                    <button class="btn btn-primary" onclick="openDriverModal()"><span>+</span> {{ t("Add driver") }}</button>
                 </div>
 
+                <!-- 1. Add a device -->
+                <div class="panel">
+                    <div class="panel-head">
+                        <h3>{{ t("Add a device") }}</h3>
+                        <div class="segmented" role="tablist" aria-label="{{ t("How to add a device") }}">
+                            <button type="button" class="segmented-btn active" data-add-mode="manual" role="tab" aria-selected="true">{{ t("Manually") }}</button>
+                            <button type="button" class="segmented-btn" data-add-mode="auto" role="tab" aria-selected="false">{{ t("Automatically") }}<span class="segmented-count" id="waiting-count-badge" hidden></span></button>
+                        </div>
+                    </div>
+
+                    <!-- Manually: name + bus, the key is shown once -->
+                    <div class="add-mode" id="add-mode-manual">
+                        <form id="form-add-device" class="add-device-form" novalidate>
+                            <div class="field">
+                                <label class="field-label" for="add-device-name">{{ t("Device name") }}</label>
+                                <input type="text" id="add-device-name" class="custom-input" maxlength="60" placeholder="{{ t("e.g. Tracker in Bus #01") }}">
+                            </div>
+                            <div class="field">
+                                <label class="field-label" for="add-device-bus">{{ t("Fitted to bus") }}</label>
+                                <select id="add-device-bus" class="custom-select">
+                                    <option value="">{{ t("Not fitted to a bus") }}</option>
+                                    {% for b in buses %}
+                                    <option value="{{ b.bus_id }}">{{ b.bus_number }} · {{ b.bus_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="add-device-actions">
+                                <button type="submit" class="btn btn-primary">{{ t("Add device") }}</button>
+                            </div>
+                        </form>
+                        <div id="add-device-error" class="form-error"></div>
+                    </div>
+
+                    <!-- Automatically: quick add, and boxes that ask to join by themselves -->
+                    <div class="add-mode" id="add-mode-auto" hidden>
+                        <div class="auto-block">
+                            <div class="auto-title">{{ t("Quick add") }}</div>
+                            <button type="button" class="btn btn-secondary" id="quick-add-btn">{{ t("Add device") }}</button>
+                        </div>
+                        <div class="auto-block auto-block-column">
+                            <div class="auto-title">{{ t("Boxes asking to join") }}</div>
+                            <div class="table-card table-card-flat">
+                                <table class="admin-table">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ t("Chip ID") }}</th>
+                                            <th>{{ t("Pairing code") }}</th>
+                                            <th>{{ t("Asked") }}</th>
+                                            <th>{{ t("Device name") }}</th>
+                                            <th>{{ t("Fitted to bus") }}</th>
+                                            <th style="text-align:right;">{{ t("Actions") }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="waiting-rows"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Counts -->
                 <div class="admin-stats-grid">
                     <div class="stat-card">
-                        <div class="stat-label">{{ t("Drivers") }}</div>
-                        <div class="stat-value">{{ drivers|length }}</div>
+                        <div class="stat-label">{{ t("Devices") }}</div>
+                        <div class="stat-value" id="stat-devices">{{ devices|length }}</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-label">{{ t("Signed in now") }}</div>
-                        <div class="stat-value" style="color:#15803d;">{{ drivers | selectattr('is_logged_in') | list | length }}</div>
+                        <div class="stat-label">{{ t("Sending GPS now") }}</div>
+                        <div class="stat-value stat-good" id="stat-devices-online">{{ devices | selectattr('status', 'equalto', 'online') | list | length }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">{{ t("Off the map") }}</div>
+                        <div class="stat-value" id="stat-devices-hidden">{{ devices | rejectattr('show_on_map') | list | length }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">{{ t("Waiting for approval") }}</div>
+                        <div class="stat-value" id="stat-devices-waiting">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">{{ t("Buses without a device") }}</div>
+                        <div class="stat-value" id="stat-buses-bare">{{ buses | rejectattr('bus_id', 'in', device_by_bus) | list | length }}</div>
                     </div>
                 </div>
 
-                <div class="table-card">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>{{ t("Driver") }}</th>
-                                <th>{{ t("Phone") }}</th>
-                                <th>{{ t("Bus today") }}</th>
-                                <th>{{ t("Route today") }}</th>
-                                <th>{{ t("Status") }}</th>
-                                <th style="text-align:right;">{{ t("Actions") }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for driver in drivers %}
-                            {% set dbus = bus_by_id.get(driver.assigned_bus_id) %}
-                            {% set droute = route_by_id.get(dbus.assigned_route_id) if dbus else none %}
-                            <tr>
-                                <td>
-                                    <div style="font-weight:700; color:#0f172a;">{{ driver.full_name }}</div>
-                                    <div style="font-size:0.75rem; color:#64748b;">{{ driver.driver_id }}</div>
-                                </td>
-                                <td>{{ driver.phone or '—' }}</td>
-                                <td>
-                                    {% if dbus %}
-                                    <div class="bus-name-cell">
-                                        <span class="bus-color-dot" style="--bus-color: {{ dbus.color_hex }}; width:24px; height:24px; font-size:0;"></span>
-                                        <span style="font-weight:700; white-space:nowrap;">{{ dbus.bus_number }}</span>
-                                    </div>
-                                    {% else %}<span class="muted">{{ t("No bus") }}</span>{% endif %}
-                                </td>
-                                <td>
-                                    {% if droute %}
-                                    <span class="route-pill"><span class="route-swatch" style="--route-color: {{ droute.color_hex }};"></span>{{ droute.route_name }}</span>
-                                    {% else %}<span class="muted">—</span>{% endif %}
-                                </td>
-                                <td>
-                                    {% if driver.is_logged_in %}<span class="session-badge-active">● {{ t("Signed in") }}</span>
-                                    {% else %}<span class="session-badge-idle">{{ t("Available") }}</span>{% endif %}
-                                </td>
-                                <td style="text-align:right;">
-                                    <div style="display:inline-flex; gap:0.4rem;">
-                                        <button class="btn btn-secondary btn-sm" onclick='openDriverModal({{ driver | tojson }})'>{{ t("Edit") }}</button>
-                                        <button class="btn btn-secondary btn-sm" onclick='openTrackerModal({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})' title="{{ t("Send GPS with the screen off (Traccar Client app)") }}">{{ t("Background GPS") }}</button>
-                                        {% if driver.is_logged_in %}
-                                        <button class="btn btn-amber btn-sm" onclick='unlockDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>{{ t("Unlock") }}</button>
-                                        {% endif %}
-                                        <button class="btn btn-secondary btn-sm" style="color:#dc2626;" onclick='deleteDriver({{ driver.driver_id | tojson }}, {{ driver.full_name | tojson }})'>{{ t("Delete") }}</button>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <!-- 3. Connected devices -->
+                <div class="panel panel-table">
+                    <div class="panel-head">
+                        <h3>{{ t("Connected devices") }}</h3>
+                    </div>
+                    <div class="table-card table-card-flat">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>{{ t("Device") }}</th>
+                                    <th>{{ t("Bus") }}</th>
+                                    <th>{{ t("Status") }}</th>
+                                    <th>{{ t("GPS / signal") }}</th>
+                                    <th>{{ t("On the map") }}</th>
+                                    <th style="text-align:right;">{{ t("Actions") }}</th>
+                                </tr>
+                            </thead>
+                            <tbody id="device-rows"></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
@@ -152,7 +201,7 @@
                         <h2>{{ t("Routes") }}</h2>
                         <p>{{ t("Add or remove routes. Every route ends at {stop}.", stop=final_destination.stop_name) }}</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openRouteModal()"><span>+</span> {{ t("Add route") }}</button>
+                    <button class="btn btn-primary" onclick="openRouteModal()">{{ t("Add route") }}</button>
                 </div>
 
                 <div class="table-card">
@@ -175,10 +224,10 @@
                                     <div style="font-size:0.75rem; color:#64748b; margin-left:14px;">{{ route.route_code }} · {{ route.route_id }}</div>
                                 </td>
                                 <td>{{ t("{km} km", km='%.1f' | format(route.length_km)) }}</td>
-                                <td>🏁 {{ final_destination.stop_name }}</td>
+                                <td>{{ final_destination.stop_name }}</td>
                                 <td>
                                     {% for b in rbuses %}
-                                    <span title="{{ b.bus_number }}" class="bus-color-dot" style="--bus-color: {{ b.color_hex }}; width:22px; height:22px; font-size:0; margin-right:2px;"></span>
+                                    <span class="bus-tag" style="--bus-color: {{ b.color_hex }};">{{ b.bus_number }}</span>
                                     {% else %}<span class="muted">{{ t("None") }}</span>{% endfor %}
                                 </td>
                                 <td style="text-align:right;">
@@ -199,9 +248,9 @@
                 <div class="admin-header-row">
                     <div class="admin-title">
                         <h2>{{ t("Buses") }}</h2>
-                        <p>{{ t("Choose each bus's route for today. Its driver sees the change on the app.") }}</p>
+                        <p>{{ t("Choose each bus's route for today. The maps change straight away.") }}</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openBusModal()"><span>+</span> {{ t("Add bus") }}</button>
+                    <button class="btn btn-primary" onclick="openBusModal()">{{ t("Add bus") }}</button>
                 </div>
 
                 <div class="admin-stats-grid">
@@ -219,7 +268,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">{{ t("Final destination") }}</div>
-                        <div class="stat-value" style="font-size:1.25rem;">🏁 {{ final_destination.stop_name }}</div>
+                        <div class="stat-value stat-value-text">{{ final_destination.stop_name }}</div>
                     </div>
                 </div>
 
@@ -230,7 +279,7 @@
                                 <th>{{ t("Bus") }}</th>
                                 <th>{{ t("For") }}</th>
                                 <th>{{ t("Route today") }}</th>
-                                <th>{{ t("Driver") }}</th>
+                                <th>{{ t("GPS device") }}</th>
                                 <th>{{ t("Status") }}</th>
                                 <th style="text-align:right;">{{ t("Actions") }}</th>
                             </tr>
@@ -240,7 +289,7 @@
                             <tr>
                                 <td>
                                     <div class="bus-name-cell">
-                                        <span class="bus-color-dot" style="--bus-color: {{ bus.color_hex }};">🚌</span>
+                                        <span class="bus-swatch" style="--bus-color: {{ bus.color_hex }};"></span>
                                         <div>
                                             <div style="font-weight:700; color:#0f172a; white-space:nowrap;">{{ bus.bus_number }}</div>
                                             <div style="font-size:0.75rem; color:#64748b;">{{ bus.bus_name }}</div>
@@ -268,9 +317,13 @@
                                         {% endfor %}
                                     </select>
                                 </td>
-                                <td>{{ bus.driver_name or '—' }}</td>
                                 <td>
-                                    {% if bus.is_active %}<span class="session-badge-active">● {{ t("Live") }}</span>
+                                    {% set bdev = device_by_bus.get(bus.bus_id) %}
+                                    {% if bdev %}<span class="status-pill status-{{ bdev.status }}">{{ bdev.name }}</span>
+                                    {% else %}<span class="muted">{{ t("None") }}</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if bus.is_active %}<span class="session-badge-active">{{ t("Live") }}</span>
                                     {% else %}<span class="session-badge-idle">{{ t("Offline") }}</span>{% endif %}
                                 </td>
                                 <td style="text-align:right;">
@@ -368,7 +421,7 @@
         <div class="modal-card wide">
             <div class="modal-head">
                 <h3 id="schedule-modal-title">{{ t("Bus schedule") }}</h3>
-                <button class="modal-close" onclick="closeModal('modal-schedule')" aria-label="{{ t("Close") }}">✕</button>
+                <button class="modal-close" onclick="closeModal('modal-schedule')" >{{ t("Close") }}</button>
             </div>
             <form id="form-schedule" novalidate>
                 <div id="schedule-form-error" class="form-error"></div>
@@ -381,12 +434,12 @@
                     <div class="sched-edit-col">
                         <div class="sched-edit-head"><span>{{ t("Morning") }}</span><small>{{ t("Reaches campus") }}</small></div>
                         <div class="trip-list" id="trips-morning"></div>
-                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="morning">+ {{ t("Add bus") }}</button>
+                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="morning">{{ t("Add bus") }}</button>
                     </div>
                     <div class="sched-edit-col">
                         <div class="sched-edit-head"><span>{{ t("Afternoon") }}</span><small>{{ t("Leaves campus") }}</small></div>
                         <div class="trip-list" id="trips-afternoon"></div>
-                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="afternoon">+ {{ t("Add bus") }}</button>
+                        <button type="button" class="btn btn-secondary btn-sm add-trip" data-part="afternoon">{{ t("Add bus") }}</button>
                     </div>
                 </div>
                 <div class="modal-actions sched-edit-actions">
@@ -399,70 +452,55 @@
         </div>
     </div>
 
-    <!-- ================= Driver modal ================= -->
-    <!-- Background GPS: what the driver types into the Traccar Client app -->
-    <div id="modal-tracker" class="modal-overlay">
+    <!-- ================= GPS device modal ================= -->
+    <div id="modal-device" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-head">
-                <h3 id="tracker-modal-title">{{ t("Background GPS") }}</h3>
-                <button class="modal-close" onclick="closeModal('modal-tracker')" aria-label="{{ t("Close") }}">✕</button>
+                <h3 id="device-modal-title">{{ t("Edit device") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-device')" >{{ t("Close") }}</button>
             </div>
-            <p class="tracker-intro">{{ t("A web page can only share GPS while it is open on the screen. With the free Traccar Client app the driver's phone keeps sending its location with the screen off or another app open.") }}</p>
-            <ol class="tracker-steps">
-                <li>{{ t("Install Traccar Client from the Play Store (Android) or App Store (iPhone).") }}</li>
-                <li>{{ t("Open it and enter these two settings:") }}
-                    <div class="tracker-field"><span>{{ t("Server URL") }}</span><code id="tracker-url"></code><button type="button" class="btn btn-secondary btn-sm" onclick="copyTracker('tracker-url')">{{ t("Copy") }}</button></div>
-                    <div class="tracker-field"><span>{{ t("Device identifier") }}</span><code id="tracker-key"></code><button type="button" class="btn btn-secondary btn-sm" onclick="copyTracker('tracker-key')">{{ t("Copy") }}</button></div>
-                </li>
-                <li>{{ t("Set Location accuracy to High, Frequency to 3 seconds, Distance to 0.") }}</li>
-                <li>{{ t("Allow location \"All the time\", turn off battery saving for the app, then switch Service status on.") }}</li>
-            </ol>
-            <p class="tracker-note">{{ t("The bus goes online with the first position and offline by itself when no GPS arrives for a few minutes. Keep the key secret: anyone with it can move this driver's bus.") }}</p>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="renewTrackerKey()">{{ t("Make a new key") }}</button>
-                <button type="button" class="btn btn-primary" onclick="closeModal('modal-tracker')">{{ t("Done") }}</button>
-            </div>
+            <form id="form-device" novalidate>
+                <input type="hidden" id="device-id">
+                <div id="device-form-error" class="form-error"></div>
+                <div class="field">
+                    <label class="field-label" for="device-name">{{ t("Device name") }}</label>
+                    <input type="text" id="device-name" class="custom-input" maxlength="60" placeholder="{{ t("e.g. Tracker in Bus #01") }}" required>
+                </div>
+                <div class="field">
+                    <label class="field-label" for="device-bus">{{ t("Fitted to bus") }}</label>
+                    <select id="device-bus" class="custom-select">
+                        <option value="">{{ t("Not fitted to a bus") }}</option>
+                        {% for b in buses %}
+                        <option value="{{ b.bus_id }}">{{ b.bus_number }} · {{ b.bus_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="field-note">{{ t("Its positions move this bus on every map. One device per bus.") }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-device')">{{ t("Cancel") }}</button>
+                    <button type="submit" class="btn btn-primary btn-sm" id="device-submit-btn">{{ t("Save") }}</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <div id="modal-driver" class="modal-overlay">
+    <!-- What goes into the device's firmware: shown once, right after the key is made -->
+    <div id="modal-device-key" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-head">
-                <h3 id="driver-modal-title">{{ t("Add driver") }}</h3>
-                <button class="modal-close" onclick="closeModal('modal-driver')" aria-label="{{ t("Close") }}">✕</button>
+                <h3 id="device-key-title">{{ t("Device settings") }}</h3>
+                <button class="modal-close" onclick="closeModal('modal-device-key')" >{{ t("Close") }}</button>
             </div>
-            <form id="form-driver" novalidate>
-                <input type="hidden" id="driver-id">
-                <div id="driver-form-error" class="form-error"></div>
-                <div class="field">
-                    <label class="field-label" for="driver-name">{{ t("Driver name") }}</label>
-                    <input type="text" id="driver-name" class="custom-input" maxlength="60" placeholder="{{ t("e.g. Md. Tariqul Islam") }}" required>
-                </div>
-                <div class="field-row">
-                    <div class="field">
-                        <label class="field-label" for="driver-phone">{{ t("Phone") }}</label>
-                        <input type="tel" id="driver-phone" class="custom-input" maxlength="30" placeholder="{{ t("+880 17xx-xxxxxx") }}">
-                    </div>
-                    <div class="field">
-                        <label class="field-label" for="driver-pin">{{ t("Login PIN") }}</label>
-                        <input type="password" id="driver-pin" data-placeholder="{{ t("{min}–{max} digits", min=pin_rules.min, max=pin_rules.max) }}" class="custom-input" inputmode="numeric" pattern="\d{ {{- pin_rules.min }},{{ pin_rules.max -}} }" maxlength="{{ pin_rules.max }}" placeholder="{{ t("{min}–{max} digits", min=pin_rules.min, max=pin_rules.max) }}" autocomplete="new-password">
-                        <div class="field-note" id="driver-pin-note"></div>
-                    </div>
-                </div>
-                <div class="field">
-                    <label class="field-label" for="driver-bus">{{ t("Bus") }}</label>
-                    <select id="driver-bus" class="custom-select" required>
-                        {% for b in buses %}
-                        <option value="{{ b.bus_id }}" data-route-id="{{ b.assigned_route_id }}">{{ b.bus_number }} · {{ b.bus_name }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="field-note" id="driver-route-note"></div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-driver')">{{ t("Cancel") }}</button>
-                    <button type="submit" class="btn btn-primary btn-sm" id="driver-submit-btn">{{ t("Add driver") }}</button>
-                </div>
-            </form>
+            <p class="tracker-intro">{{ t("Put these into firmware/busplus_tracker/secrets.h, add your Wi-Fi name and password, then upload the sketch to the ESP32.") }}</p>
+            <div class="tracker-field"><span>{{ t("Server URL") }}</span><code id="device-url"></code><button type="button" class="btn btn-secondary btn-sm" onclick="copyText('device-url')">{{ t("Copy") }}</button></div>
+            <div class="tracker-field"><span>{{ t("Device key") }}</span><code id="device-key"></code><button type="button" class="btn btn-secondary btn-sm" onclick="copyText('device-key')">{{ t("Copy") }}</button></div>
+            <p class="tracker-note" id="device-lan-note" hidden></p>
+            <div class="secrets-head"><span>secrets.h</span><button type="button" class="btn btn-secondary btn-sm" onclick="copyText('device-secrets')">{{ t("Copy all") }}</button></div>
+            <pre class="secrets-box" id="device-secrets"></pre>
+            <p class="tracker-note tracker-warn">{{ t("This key is shown only now. Keep it secret: anyone with it can move this bus on the map. Lost it? Make a new key.") }}</p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-primary" onclick="closeModal('modal-device-key'); location.reload();">{{ t("Done") }}</button>
+            </div>
         </div>
     </div>
 
@@ -471,7 +509,7 @@
         <div class="modal-card wide">
             <div class="modal-head">
                 <h3 id="route-modal-title">{{ t("Add route") }}</h3>
-                <button class="modal-close" onclick="closeModal('modal-route')" aria-label="{{ t("Close") }}">✕</button>
+                <button class="modal-close" onclick="closeModal('modal-route')" >{{ t("Close") }}</button>
             </div>
             <form id="form-route" novalidate>
                 <input type="hidden" id="route-id">
@@ -480,7 +518,7 @@
                     <div class="field">
                         <label class="field-label" for="route-name">{{ t("Route name") }}</label>
                         <input type="text" id="route-name" class="custom-input" maxlength="80" placeholder="{{ t("e.g. Rupsha - {stop}", stop=final_destination.stop_name) }}" autocomplete="off" required>
-                        <div class="field-note">{{ t("Riders, drivers and the admin all see this name.") }}</div>
+                        <div class="field-note">{{ t("Riders and the admin both see this name.") }}</div>
                     </div>
                     <div class="field">
                         <label class="field-label" for="route-color">{{ t("Colour") }}</label>
@@ -514,7 +552,7 @@
         <div class="modal-card">
             <div class="modal-head">
                 <h3 id="bus-modal-title">{{ t("Add bus") }}</h3>
-                <button class="modal-close" onclick="closeModal('modal-bus')" aria-label="{{ t("Close") }}">✕</button>
+                <button class="modal-close" onclick="closeModal('modal-bus')" >{{ t("Close") }}</button>
             </div>
             <form id="form-bus" novalidate>
                 <input type="hidden" id="bus-id">
@@ -543,7 +581,7 @@
                     <span class="field-label">{{ t("Bus for") }}</span>
                     <div class="audience-choice" role="radiogroup" aria-label="{{ t("Bus for") }}">
                         {% for key, rider in rider_types.items() %}
-                        <label><input type="radio" name="bus-audience" value="{{ key }}" {% if loop.first %}checked{% endif %}> {{ rider.plural }}</label>
+                        <label><input type="radio" name="bus-audience" value="{{ key }}" {% if key == default_rider_type %}checked{% endif %}> {{ rider.plural }}</label>
                         {% endfor %}
                     </div>
                     <div class="field-note">{{ t("Each group only sees the buses meant for it.") }}</div>
@@ -575,7 +613,7 @@
 
     <div id="admin-toast" role="status" aria-live="polite"></div>
 
-    <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_bus_seats": default_bus_seats, "schedules": schedules, "day_names": day_names, "today": today} | tojson }}</script>
+    <script type="application/json" id="admin-data">{{ {"routes": routes, "buses": buses, "destination": final_destination, "rider_types": rider_types, "default_rider_type": default_rider_type, "default_bus_seats": default_bus_seats, "schedules": schedules, "day_names": day_names, "today": today, "devices": devices, "server_now": server_now} | tojson }}</script>
     <script>window.WORDS = Object.assign(window.WORDS || {}, {{ page_words("backend", "map") | tojson }});</script>
     {# Live map tab: the same smooth live map as the riders' (content/map_settings.py) #}
     <script>window.APP_CONFIG = Object.assign({ universityLocation: {{ map_center | tojson }} }, {{ map_config | tojson }});</script>

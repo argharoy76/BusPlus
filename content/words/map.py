@@ -1,6 +1,6 @@
 """
-ON EVERY MAP - the student / teacher map and the driver's map
-(bus markers, the pop-up when a driver taps a bus, the rider's own position).
+ON EVERY MAP - the riders' map and the admin's Live map
+(bus markers, the pop-up when the admin taps a bus, the rider's own position).
 The Map / Satellite / Traffic buttons and the corner label are in content/map_settings.py.
 Change only the right side of each line. (Help: content/words/__init__.py)
 """
@@ -9,7 +9,7 @@ WORDS = {
     # ---- Bus markers ----
     "{speed} km/h": "{speed} km/h",               # small speed tag under a moving bus
 
-    # ---- Pop-up when a bus is tapped (driver map) ----
+    # ---- Pop-up when a bus is tapped (admin Live map) ----
     "Live": "Live",
     "Route": "Route",
     "Speed": "Speed",

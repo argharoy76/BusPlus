@@ -58,17 +58,6 @@ BUSES = [
     ("KU-BUS-04", "KU Bus #04", "Bhairab Shuttle", "Khulna-Cha 11-5088", "KU-R01", "#7C3AED", 40),
 ]
 
-# ---- DEMO DRIVERS -------------------------------------------------------------
-# Only created when BUSPLUS_DEMO_DRIVERS is on (your computer), never on the live server.
-# (driver ID, username, full name, phone, bus ID)
-DEMO_DRIVERS = [
-    ("DRV-01", "rafiqul", "Md. Rafiqul Islam", "+880 1712-890123", "KU-BUS-01"),
-    ("DRV-02", "mannan", "Abdul Mannan", "+880 1715-456789", "KU-BUS-02"),
-    ("DRV-03", "kamal", "Kamal Hossain", "+880 1819-123987", "KU-BUS-03"),
-    ("DRV-04", "siraj", "Siraj Uddin", "+880 1913-654321", "KU-BUS-04"),
-]
-DEMO_DRIVER_PIN = "1234"   # PIN of every demo driver
-
 # ---- BUS SCHEDULES ------------------------------------------------------------
 # Starting timetable of each route. Afterwards it is edited day by day in the backend
 # (Schedules tab). Also added once to a server that already has data but no timetables.

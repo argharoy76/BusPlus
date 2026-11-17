@@ -1,9 +1,7 @@
 """
 The front-end pages (HTML).
 
-  /                      start page: Driver + one button per rider type
-  /driver/login          driver sign-in
-  /driver/dashboard      driver's full-screen map (signed-in driver only)
+  /                      start page: one button per rider type
   /<type>/login          rider sign-in, e.g. /student/login, /teacher/login
   /<type>/dashboard      rider live map with only that type's buses, e.g. /student/dashboard
                          (rider types are listed in content/user_types.py)
@@ -16,13 +14,13 @@ from config import Config
 from content import branding, colors
 from extensions import talisman
 from models.rider_types import rider_info
-from services import tracking, users
+from services import tracking
 
 view_bp = Blueprint("views", __name__)
 
 @view_bp.get("/")
 def landing():
-    """Start page: the Driver button and one button per rider type (content/user_types.py)."""
+    """Start page: one button per rider type (content/user_types.py)."""
     return render_template("landing.html")
 
 
@@ -42,45 +40,6 @@ def favicon():
 def health():
     """Used by the deploy script and uptime monitors to check the app is running."""
     return {"status": "ok"}
-
-
-# ---------------------------------------------------------------------------
-# Driver
-# ---------------------------------------------------------------------------
-def _signed_in_driver():
-    """The driver signed in on this phone, or None (also None if another phone took over)."""
-    if session.get("role") != "driver":
-        return None
-    driver = users.get_driver(session.get("driver_id"))
-    if driver is None or driver.session_token != session.get("session_token"):
-        return None
-    return driver
-
-
-@view_bp.get("/driver/login")
-def driver_login():
-    """Driver sign-in page (a driver who is still signed in goes straight to the map)."""
-    if _signed_in_driver():
-        return redirect(url_for("views.driver_dashboard"))
-    return render_template("driver_login.html", routes=tracking.all_routes())
-
-
-@view_bp.get("/driver/dashboard")
-def driver_dashboard():
-    """The driver's full-screen map. Sends anyone else back to the sign-in page."""
-    driver = _signed_in_driver()
-    if driver is None:
-        session.pop("role", None)
-        session.pop("driver_id", None)
-        return redirect(url_for("views.driver_login"))
-    bus = tracking.get_bus(driver.assigned_bus_id)
-    return render_template(
-        "driver_dashboard.html",
-        driver={"driver_id": driver.driver_id, "full_name": driver.full_name},
-        bus=bus.to_dict() if bus else {},
-        routes=tracking.all_routes(),
-        map_center=Config.UNIVERSITY_LOCATION,
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -1117,7 +1117,7 @@ select {
     line-height: 1;
 }
 
-/* One bus's details: 2 x 2 grid of Speed / Next stop / Route / Driver */
+/* One bus's details: 2 x 2 grid of Speed / Next stop / Route / Seats */
 .sheet-bus-detail {
     padding: 10px 4px;
     display: flex;

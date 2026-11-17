@@ -296,7 +296,8 @@
 
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
 .modal-head h3 { font-size: 1.15rem; font-weight: 800; margin: 0; }
-.modal-close { background: none; border: none; font-size: 1.25rem; cursor: pointer; color: #64748b; }
+.modal-close { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.35rem 0.75rem; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: #475569; }
+.modal-close:hover { background: #f8fafc; color: #0f172a; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; }
 .modal-card.wide { max-width: 860px; max-height: calc(100vh - 2rem); overflow-y: auto; }
 
@@ -477,13 +478,14 @@
 .sched-edit-head span { font-weight: 800; color: #0f172a; }
 .sched-edit-head small { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; }
 .trip-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.trip-row { display: grid; grid-template-columns: minmax(0, 1fr) 132px 32px; gap: 6px; align-items: center; }
+.trip-row { display: grid; grid-template-columns: minmax(0, 1fr) 132px auto; gap: 6px; align-items: center; }
 .trip-row .trip-time { padding-left: 8px; padding-right: 6px; }
 .trip-row .custom-select, .trip-row .custom-input { height: 38px; min-width: 0; }
 .trip-remove {
-    width: 32px; height: 32px; border: none; border-radius: 8px; background: #fef2f2; color: #dc2626;
-    font-size: 0.85rem; cursor: pointer;
+    height: 32px; padding: 0 10px; border: 1px solid #fecaca; border-radius: 8px; background: #fff; color: #b91c1c;
+    font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer;
 }
+.trip-remove:hover { background: #fef2f2; }
 .sched-edit-actions { align-items: center; flex-wrap: wrap; }
 .sched-edit-actions .spacer { flex: 1; }
 
@@ -497,21 +499,148 @@
 .live-map { height: calc(100vh - 190px); min-height: 420px; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; }
 .live-list { max-height: calc(100vh - 190px); overflow-y: auto; }
 .live-list td { font-size: 0.85rem; }
-.live-bus { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #0f172a; cursor: pointer; }
-.live-bus .bus-color-dot { width: 14px; height: 14px; font-size: 0; }
+.live-bus { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: #0f172a; cursor: pointer; white-space: nowrap; }
+.live-bus .bus-color-dot { width: 10px; height: 10px; border: none; box-shadow: none; border-radius: 3px; }
 .live-stale td { opacity: 0.55; }
 @media (max-width: 1100px) {
     .live-layout { grid-template-columns: 1fr; }
     .live-map { height: 60vh; }
 }
 
-/* ---- Background GPS pop-up ---- */
+/* ---- GPS device settings pop-up ---- */
 .tracker-intro, .tracker-note { font-size: 0.86rem; color: #475569; margin: 0 0 0.75rem; line-height: 1.5; }
 .tracker-note { margin-top: 0.75rem; font-size: 0.8rem; }
-.tracker-steps { margin: 0; padding-left: 1.2rem; font-size: 0.88rem; color: #0f172a; display: grid; gap: 0.6rem; }
 .tracker-field { display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 .tracker-field span { font-size: 0.78rem; font-weight: 700; color: #64748b; }
 .tracker-field code {
     font-size: 0.85rem; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px;
     padding: 0.45rem 0.6rem; overflow-wrap: anywhere; user-select: all;
 }
+
+/* ---------- GPS devices tab ---------- */
+.device-help { margin: 0.9rem 0 0; font-size: 0.8rem; color: #64748b; }
+
+/* Device settings pop-up: the ready-to-paste secrets.h */
+.secrets-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 1rem; font-size: 0.78rem; font-weight: 700; color: #64748b;
+}
+.secrets-box {
+    margin: 0.4rem 0 0; padding: 0.75rem 0.85rem; background: #0f172a; color: #e2e8f0;
+    border-radius: 10px; font-size: 0.78rem; line-height: 1.55; overflow-x: auto; white-space: pre;
+}
+.tracker-warn { color: #b45309; font-weight: 600; }
+
+
+
+/* =====================================================================
+   Professional, icon-free backend (sidebar, panels, status pills)
+   ===================================================================== */
+.admin-brand { display: block; }
+.admin-brand-name { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; color: #0f172a; }
+.admin-brand-sub { margin-top: 2px; font-size: 0.75rem; font-weight: 500; color: #64748b; }
+.admin-nav-group {
+    margin: 1.25rem 0 0.4rem; padding: 0 1rem;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8;
+}
+.admin-nav-group:first-of-type { margin-top: 0; }
+.admin-nav-list { gap: 0.15rem; }
+.admin-nav-item { justify-content: space-between; padding: 0.6rem 1rem; border: 1px solid transparent; }
+.admin-nav-item.active { background: #f1f5f9; color: #0f172a; border-color: #e2e8f0; box-shadow: inset 3px 0 0 var(--bp-brand); }
+.admin-nav-quiet { color: #64748b; }
+.admin-nav-danger { color: #b91c1c; }
+.nav-count, .segmented-count {
+    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+    background: var(--bp-brand); color: #fff; font-size: 0.7rem; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.nav-count[hidden], .segmented-count[hidden] { display: none; }
+
+.stat-good { color: #15803d; }
+.stat-value-text { font-size: 1.15rem; padding-top: 0.45rem; }
+.admin-stats-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+
+/* Panels: a titled white box (Add a device, Connected devices) */
+.panel {
+    background: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm); padding: 1.25rem 1.25rem 1.1rem; margin-bottom: 1.5rem; overflow: hidden;
+}
+.panel-table { padding: 1.25rem 0 0; overflow: hidden; }
+.panel-table .panel-head { padding: 0 1.25rem; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.panel-head h3 { margin: 0; font-size: 1rem; font-weight: 800; color: #0f172a; }
+.panel-head-note { font-size: 0.75rem; color: #94a3b8; }
+.panel-note { margin: 0.35rem 0 0; font-size: 0.8rem; line-height: 1.5; color: #64748b; }
+.table-card-flat { border: none; border-radius: 0; box-shadow: none; }
+.panel .table-card-flat { border-top: 1px solid var(--border-subtle); }
+
+/* Manually / Automatically switch */
+.segmented { display: inline-flex; padding: 3px; gap: 3px; background: #f1f5f9; border-radius: 10px; }
+.segmented-btn {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    border: none; background: transparent; border-radius: 8px; padding: 0.45rem 0.95rem;
+    font: inherit; font-size: 0.82rem; font-weight: 600; color: #475569; cursor: pointer;
+}
+.segmented-btn.active { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }
+
+.add-device-form { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 0.75rem; align-items: end; }
+.add-device-form .field { margin-bottom: 0; }
+.add-device-actions .btn { height: 42px; }
+#add-device-error { margin-top: 0.75rem; }
+.auto-block {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: 1rem 0; border-top: 1px solid var(--border-subtle);
+}
+.auto-block:first-child { border-top: none; padding-top: 0; }
+.auto-block-column { flex-direction: column; align-items: stretch; padding-bottom: 0; }
+.auto-block-column .table-card-flat { margin: 0 -1.25rem -1.1rem; }
+.auto-title { font-size: 0.9rem; font-weight: 700; color: #0f172a; }
+@media (max-width: 850px) {
+    .add-device-form { grid-template-columns: 1fr; }
+    .auto-block { flex-direction: column; align-items: stretch; }
+}
+
+/* Table cells */
+.admin-table th { font-size: 0.7rem; letter-spacing: 0.05em; }
+.cell-title { font-weight: 700; color: #0f172a; white-space: nowrap; }
+.col-device { min-width: 190px; max-width: 260px; }
+.col-actions { text-align: right; min-width: 215px; }
+.admin-table th { white-space: nowrap; }
+.cell-sub { margin-top: 2px; font-size: 0.74rem; color: #64748b; }
+.mono, .pair-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.pair-code {
+    display: inline-block; padding: 0.2rem 0.5rem; border-radius: 6px; background: #f1f5f9; border: 1px solid #e2e8f0;
+    font-size: 0.9rem; font-weight: 700; letter-spacing: 0.12em; color: #0f172a;
+}
+.nowrap { white-space: nowrap; }
+.row-actions { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
+#device-rows .row-actions { max-width: 215px; }
+.row-muted td { background: #fcfcfd; }
+.row-muted .cell-title { color: #64748b; }
+.map-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; white-space: nowrap; }
+.btn-danger-text { color: #b91c1c; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.input-sm { height: 34px; font-size: 0.82rem; padding: 0 0.6rem; min-width: 150px; }
+
+/* Status pills: plain text on a soft colour (no dots or icons) */
+.status-pill {
+    display: inline-block; margin-bottom: 2px; white-space: nowrap; font-size: 0.74rem; font-weight: 600;
+    padding: 0.2rem 0.6rem; border-radius: 6px; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+}
+.status-online, .status-on-map { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.status-no_fix { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.status-offline { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.status-off-map { background: #f8fafc; color: #64748b; border-color: #cbd5e1; border-style: dashed; }
+.session-badge-active, .session-badge-idle { border-radius: 6px; }
+
+/* A bus shown by its number with its map colour as a left bar */
+.bus-tag {
+    display: inline-block; white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #0f172a;
+    padding: 0.15rem 0.5rem 0.15rem 0.55rem; margin: 0 4px 4px 0; border-radius: 6px;
+    background: #f8fafc; border: 1px solid #e2e8f0; box-shadow: inset 3px 0 0 var(--bus-color, var(--bp-brand));
+}
+.bus-swatch { width: 6px; align-self: stretch; min-height: 40px; border-radius: 999px; background: var(--bus-color, var(--bp-brand)); flex-shrink: 0; }
+#waiting-rows .row-actions { flex-wrap: nowrap; }
+
+.sign-out-form { margin: 0; }
+.sign-out-form button { width: 100%; background: none; font: inherit; text-align: left; }

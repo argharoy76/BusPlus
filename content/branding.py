@@ -9,7 +9,7 @@ APP_NAME = "BusPlus"
 UNIVERSITY_NAME = "Khulna University"
 
 # The logo: this emoji on a rounded square in the brand colour (content/colors.py, THEME "brand").
-# It is used on the start page, sign-in pages, map buttons, driver button, backend and browser tab icon.
+# It is used on the start page, sign-in pages, map buttons, backend and browser tab icon.
 LOGO_EMOJI = "🚌"
 
 # Browser tab title. {app} = APP_NAME, {university} = UNIVERSITY_NAME, {page} = the page's own name.

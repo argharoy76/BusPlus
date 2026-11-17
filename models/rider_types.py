@@ -8,10 +8,10 @@ which buses each type sees, and the backend's Buses and Users tabs.
 
 import re
 
-from content.user_types import DRIVER, RIDER_TYPES
+from content.user_types import DEFAULT_RIDER_TYPE, RIDER_TYPES
 
 # Words already used in web addresses, so they can't be rider type keys.
-RESERVED_KEYS = {"driver", "admin", "backend", "api", "static", "health"}
+RESERVED_KEYS = {"driver", "device", "admin", "backend", "api", "static", "health"}
 REQUIRED_FIELDS = ("label", "plural", "id_label", "icon", "color")
 # Pictures the "icon" setting may name (drawn by templates/_ui.html).
 ICON_NAMES = ("cap", "briefcase", "user", "users", "suitcase", "book", "id", "star", "bus", "steering")
@@ -30,15 +30,17 @@ def _check_rider_types() -> None:
             raise ValueError(f"{where}: missing {', '.join(missing)}.")
         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", info["color"]):
             raise ValueError(f'{where}: color must look like "#059669".')
-    for name, info in [*RIDER_TYPES.items(), ("driver", DRIVER)]:
+    if DEFAULT_RIDER_TYPE not in RIDER_TYPES:
+        raise ValueError(f'content/user_types.py: DEFAULT_RIDER_TYPE must be one of {", ".join(RIDER_TYPES)}.')
+    for name, info in RIDER_TYPES.items():
         if info.get("icon") not in ICON_NAMES:
             raise ValueError(f'content/user_types.py, "{name}": icon must be one of {", ".join(ICON_NAMES)}.')
 
 
 _check_rider_types()
 
-RIDER_KEYS: tuple[str, ...] = tuple(RIDER_TYPES)   # e.g. ("student", "teacher")
-DEFAULT_RIDER_KEY = RIDER_KEYS[0]                   # new buses are for this type
+RIDER_KEYS: tuple[str, ...] = tuple(RIDER_TYPES)   # e.g. ("teacher", "student", "staff"), start-page order
+DEFAULT_RIDER_KEY = DEFAULT_RIDER_TYPE              # new buses are for this type
 
 
 def rider_info(key: str) -> dict | None:
@@ -46,4 +48,4 @@ def rider_info(key: str) -> dict | None:
     return RIDER_TYPES.get(key)
 
 
-__all__ = ["DEFAULT_RIDER_KEY", "DRIVER", "RIDER_KEYS", "RIDER_TYPES", "rider_info"]
+__all__ = ["DEFAULT_RIDER_KEY", "RIDER_KEYS", "RIDER_TYPES", "rider_info"]

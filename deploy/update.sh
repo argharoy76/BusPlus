@@ -10,28 +10,35 @@
 # =============================================================================
 set -euo pipefail
 
-APP_DIR=/opt/busplus
-BRANCH="${BRANCH:-main}"
-cd "$APP_DIR"
+# Everything is inside main(), so bash reads the whole script before running it: the
+# "git reset" below replaces this very file, and that must not change the lines still to run.
+main() {
+    APP_DIR=/opt/busplus
+    BRANCH="${BRANCH:-main}"
+    cd "$APP_DIR"
 
-echo "==> Getting the newest code ($BRANCH)"
-git fetch --quiet origin "$BRANCH"
-git reset --hard --quiet "origin/$BRANCH"
+    echo "==> Getting the newest code ($BRANCH)"
+    git fetch --quiet origin "$BRANCH"
+    git reset --hard --quiet "origin/$BRANCH"
 
-echo "==> Installing Python libraries"
-.venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt
+    echo "==> Installing Python libraries"
+    .venv/bin/pip install --quiet --disable-pip-version-check -r requirements.txt
 
-echo "==> Restarting BusPlus"
-sudo /usr/bin/systemctl restart busplus
+    echo "==> Restarting BusPlus"
+    sudo /usr/bin/systemctl restart busplus
 
-for _ in $(seq 20); do
-    if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
-        echo "==> BusPlus is running version $(git rev-parse --short HEAD)"
-        exit 0
-    fi
-    sleep 1
-done
+    for _ in $(seq 20); do
+        if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+            echo "==> BusPlus is running version $(git rev-parse --short HEAD)"
+            exit 0
+        fi
+        sleep 1
+    done
 
-echo "!! BusPlus did not start. Last log lines:"
-journalctl -u busplus -n 40 --no-pager || true
-exit 1
+    echo "!! BusPlus did not start. Last log lines:"
+    journalctl -u busplus -n 40 --no-pager || true
+    exit 1
+}
+
+main "$@"
+exit $?

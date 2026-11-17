@@ -14,8 +14,15 @@ WORDS = {
     "Username": "Username",
     "Password": "Password",
     "Sign in": "Sign in",
+    "Show password": "Show password",            # the eye button in the password box
+    "Hide password": "Hide password",
+    "On this computer the password is in:": "On this computer the password is in:",   # never shown on the live server
 
     # ---- Errors ----
     "Sign-in failed.": "Sign-in failed.",
     "Connection error. Please try again.": "Connection error. Please try again.",
+
+    # ---- Show / hide password button ----
+    "Hide": "Hide",
+    "Show": "Show",
 }

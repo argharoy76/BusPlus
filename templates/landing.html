@@ -15,13 +15,8 @@
         <p class="lp-subtitle">{{ brand.UNIVERSITY_NAME }}</p>
     </header>
 
-    {# Driver first, then one option per rider type (content/user_types.py). Name and university: content/branding.py #}
+    {# One option per rider type (content/user_types.py). Name and university: content/branding.py #}
     <nav class="lp-options">
-        <a href="{{ url_for('views.driver_login') }}" class="lp-option" style="--accent: {{ driver_button.color }}">
-            <span class="lp-option-icon">{{ icon(driver_button.icon) }}</span>
-            <span class="lp-option-label">{{ driver_button.label }}</span>
-            {{ icon("chevron", "lp-option-chevron") }}
-        </a>
         {% for key, rider in rider_types.items() %}
         <a href="{{ url_for('views.rider_login', rider_type=key) }}" class="lp-option" style="--accent: {{ rider.color }}">
             <span class="lp-option-icon">{{ icon(rider.icon) }}</span>

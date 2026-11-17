@@ -3,7 +3,7 @@ A bus: the details the admin sets up, plus where it is right now.
 
 The setup part (number, name, route, colour, ...) is saved in the `buses` table.
 The live part (position, speed, trip status, ...) only lives in memory and is
-updated by the driver's phone about once a second.
+updated by the bus's GPS box every couple of seconds (controllers/device_controller.py).
 """
 
 import time
@@ -31,16 +31,12 @@ class Bus:
     capacity: int = 52
     audience: str = DEFAULT_RIDER_KEY    # which rider type sees this bus, e.g. "student"
 
-    # ---- the driver assigned to it (kept in step by the driver setup) ----
-    driver_id: str | None = None
-    driver_name: str | None = None
-
     # ---- live state (memory only) ----
     current_latitude: float = Config.UNIVERSITY_LOCATION["latitude"]
     current_longitude: float = Config.UNIVERSITY_LOCATION["longitude"]
     speed_kmh: float = 0.0
     heading_deg: float = 0.0
-    is_active: bool = False              # True while the driver is online and sending GPS
+    is_active: bool = False              # True while its GPS box is sending positions
     is_simulating: bool = False          # True during an admin "test drive"
     trip_status: str = "IDLE"            # IDLE, EN_ROUTE or ARRIVED
     current_stop_index: int = 0          # index of the next stop on the route
@@ -66,7 +62,7 @@ class Bus:
         self.last_update_ts = time.time()
 
     def shown_speed(self) -> float:
-        """Speed for the maps: 0 when the phone has sent nothing for a while (content/rules.py)."""
+        """Speed for the maps: 0 when its GPS box has sent nothing for a while (content/rules.py)."""
         if self.is_active and time.time() - self.last_update_ts > rules.SPEED_STALE_SECONDS:
             return 0.0
         return round(self.speed_kmh, 1)
@@ -90,7 +86,7 @@ class Bus:
         }
 
     def to_dict(self) -> dict:
-        """JSON form sent to the browser (no private driver details such as phone numbers)."""
+        """JSON form sent to the browser."""
         return {
             "bus_id": self.bus_id,
             "bus_number": self.bus_number,
@@ -100,8 +96,6 @@ class Bus:
             "color_hex": self.color_hex,
             "capacity": self.capacity,
             "audience": self.audience,
-            "driver_id": self.driver_id,
-            "driver_name": self.driver_name,
             "current_latitude": self.current_latitude,
             "current_longitude": self.current_longitude,
             "speed_kmh": self.shown_speed(),

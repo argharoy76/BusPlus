@@ -1,5 +1,5 @@
 /*
- * "Bus schedule" pop-up (templates/_schedule_popup.html) for students, teachers and drivers.
+ * "Bus schedule" pop-up (templates/_schedule_popup.html) for students, teachers and staff.
  *
  * Shows TODAY's buses of the chosen route: in the Morning tab the time each bus reaches
  * the campus, in the Afternoon tab the time it leaves the campus. The admin sets the

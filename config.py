@@ -81,6 +81,7 @@ class Config:
 
     # Backend (/backend) admin login.
     ADMIN_USERNAME = os.environ.get("BUSPLUS_ADMIN_USERNAME", "admin").strip() or "admin"
+    ADMIN_PASSWORD_FILE = INSTANCE_DIR / "admin_password.txt"     # your computer's password (no .env)
     ADMIN_PASSWORD = os.environ.get("BUSPLUS_ADMIN_PASSWORD") or (
         None if IS_PRODUCTION else _local_secret("admin_password.txt", 9)
     )
@@ -93,7 +94,7 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(days=180)   # students/teachers stay signed in
 
     # Flask-WTF CSRF protection: every POST/PUT/DELETE must carry the page's token.
-    # No time limit, because a driver's map page stays open for a whole shift.
+    # No time limit, because a live map page may stay open all day.
     WTF_CSRF_TIME_LIMIT = None
     WTF_CSRF_SSL_STRICT = IS_PRODUCTION
 
@@ -117,10 +118,6 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or f"sqlite:///{INSTANCE_DIR / 'busplus.db'}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # On first start with an empty database, also create 4 demo drivers (PIN 1234).
-    # Handy on your computer; keep it off on the live server.
-    SEED_DEMO_DRIVERS = env_bool("BUSPLUS_DEMO_DRIVERS", not IS_PRODUCTION)
-
     # ------------------------------------------------------------------
     # BusPlus constants - edit them in the content/ folder, not here.
     # ------------------------------------------------------------------
@@ -128,7 +125,6 @@ class Config:
     UNIVERSITY_LOCATION = map_settings.MAP_CENTER          # map centre before any bus/home is known
     FINAL_DESTINATION = map_settings.FINAL_DESTINATION     # last stop of every route (Hadi Chattar)
     TIMEZONE = map_settings.TIMEZONE
-    DRIVER_SESSION_TIMEOUT_MINUTES = rules.DRIVER_LOCK_MINUTES
     DEFAULT_ALERT_MINUTES = rules.DEFAULT_ALERT_MINUTES
 
     # Road router used by the route editor to snap a route to real roads (OpenStreetMap data).
@@ -155,7 +151,6 @@ class TestConfig(Config):
     SECRET_KEY = "test-secret-key"
     ADMIN_PASSWORD = "test-admin-password"
     SQLALCHEMY_DATABASE_URI = "sqlite://"
-    SEED_DEMO_DRIVERS = True
     WTF_CSRF_ENABLED = False
     FORCE_HTTPS = False
     RATELIMIT_ENABLED = False

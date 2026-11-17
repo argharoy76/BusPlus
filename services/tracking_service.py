@@ -32,6 +32,7 @@ from itertools import pairwise
 from content import colors, rules
 from models.bus import BUS_AUDIENCES, Bus
 from models.records import BusRecord, RouteRecord
+from models.rider_types import DEFAULT_RIDER_KEY
 from models.route import FINAL_STOP_NAME, BusRoute, BusStop
 from services import geo, store
 from services.road_router import RoadRouterError, road_path
@@ -70,7 +71,7 @@ class TrackingService:
         self._speedometers: dict[str, Speedometer] = {}   # bus_id -> recent GPS fixes and speed
         self._along: dict[str, AlongTrack] = {}           # bus_id -> smoothed distance along its route
         self._paths: dict[str, tuple[tuple, RoutePath]] = {}   # route_id -> (version key, measurable line)
-        self._clocks: dict[str, tuple[float, float]] = {}  # bus_id -> (phone-to-server clock offset, set at)
+        self._clocks: dict[str, tuple[float, float]] = {}  # bus_id -> (device-to-server clock offset, set at)
         self._trail_progress: dict[str, float | None] = {}  # bus_id -> route distance of its last trail point
         self._last_push: dict[str, float] = {}            # bus_id -> when open maps last heard of it
         self._gap_fills: set[str] = set()                 # buses with a road look-up for a trail gap running
@@ -251,7 +252,7 @@ class TrackingService:
                 assigned_route_id=clean["assigned_route_id"],
                 color_hex=clean.get("color_hex") or _first_unused(BUS_COLOR_PALETTE, used_colors),
                 capacity=clean.get("capacity", rules.DEFAULT_BUS_SEATS),
-                audience=clean.get("audience", BUS_AUDIENCES[0]),
+                audience=clean.get("audience", DEFAULT_RIDER_KEY),
             )
             self._park_at_route_start(bus)
             self._buses[bus.bus_id] = bus
@@ -292,17 +293,6 @@ class TrackingService:
             self._bump()
             return True
 
-    def show_driver_on_bus(self, driver_id: str, driver_name: str | None, bus_id: str | None) -> None:
-        """Show a driver on their bus (and on no other bus). bus_id=None just removes them."""
-        with self._lock:
-            for bus in self._buses.values():
-                if bus.driver_id == driver_id:
-                    bus.driver_id = bus.driver_name = None
-            bus = self._buses.get(bus_id or "")
-            if bus is not None:
-                bus.driver_id, bus.driver_name = driver_id, driver_name
-            self._bump()
-
     def _clean_bus_fields(self, data: dict, creating: bool) -> dict:
         """Check the bus form from the admin panel. Raises ValueError with a readable message."""
         clean: dict = {}
@@ -340,22 +330,22 @@ class TrackingService:
         return clean
 
     # =====================================================================
-    # Live tracking (driver's phone)
+    # Live tracking (the bus's GPS box)
     # =====================================================================
     def update_location(self, bus_id: str, latitude: float, longitude: float,
                         speed_kmh: float | None = None, heading_deg: float | None = None,
                         trip_status: str = "EN_ROUTE", accuracy_m: float | None = None,
                         fix_time: float | None = None) -> dict | None:
         """
-        Record a GPS position from the driver's phone (or a test drive). Returns the bus, or None.
+        Record a GPS position from the bus's GPS box (or a test drive). Returns the bus, or None.
 
           1. When the fix was taken, on the server's clock (`_sample_time`), so maps can
              move the bus at its real pace even if the network delivers fixes unevenly.
-          2. Phone fixes go through the bus's Speedometer: very inaccurate fixes are ignored,
+          2. GPS fixes go through the bus's Speedometer: very inaccurate fixes are ignored,
              a parked bus shows 0 km/h and keeps still, otherwise a smoothed speed.
           3. Near its route (ROUTE_SNAP_METERS) the bus is put on the road line and its
              distance along the route is smoothed, so it glides along the road.
-          4. The red trail grows; a gap (e.g. the phone was off for a minute) is filled
+          4. The red trail grows; a gap (e.g. the GPS box lost signal for a minute) is filled
              along the road instead of a straight line.
         """
         with self._lock:
@@ -370,11 +360,11 @@ class TrackingService:
             stopped = False
             if not bus.is_simulating:
                 reading = self._speedometer(bus_id).update(
-                    latitude, longitude, accuracy_m=accuracy_m, phone_speed_kmh=speed_kmh,
-                    phone_heading=heading_deg if speed_kmh is None or speed_kmh >= rules.SPEED_MIN_KMH else None,
+                    latitude, longitude, accuracy_m=accuracy_m, gps_speed_kmh=speed_kmh,
+                    gps_heading=heading_deg if speed_kmh is None or speed_kmh >= rules.SPEED_MIN_KMH else None,
                     fix_time=sample_t)
                 if not reading.use_fix:
-                    bus.last_update_ts = time.time()   # the phone is still there, just inaccurate
+                    bus.last_update_ts = time.time()   # the GPS box is still there, just inaccurate
                     return bus.to_dict()
                 latitude, longitude = reading.latitude, reading.longitude
                 speed_kmh, heading_deg, stopped = reading.speed_kmh, reading.heading_deg, reading.stopped
@@ -431,9 +421,9 @@ class TrackingService:
 
     def _sample_time(self, bus_id: str, fix_time: float | None, previous: float) -> float:
         """
-        When a fix was taken, on the server's clock. The phone's own fix times are exact but
+        When a fix was taken, on the server's clock. The GPS box's own fix times are exact but
         its clock may be a little off, so they are shifted by the smallest delay seen so far
-        (which slowly follows any drift). Without a phone time: the moment it arrived.
+        (which slowly follows any drift). Without a fix time: the moment it arrived.
         """
         now = time.time()
         sample = now
@@ -459,7 +449,7 @@ class TrackingService:
         return cached[1]
 
     def start_trip(self, bus_id: str) -> dict | None:
-        """Driver went online: the bus shows on the maps from its next GPS position."""
+        """The GPS box started reporting: the bus shows on the maps from its next GPS position."""
         with self._lock:
             bus = self._buses.get(bus_id)
             if bus is None:
@@ -475,7 +465,7 @@ class TrackingService:
     def start_auto_offline(self) -> None:
         """
         Background check, every 30 s: a live bus with no GPS for AUTO_OFFLINE_MINUTES goes offline
-        (its phone app was switched off, the battery died ...). Started once by create_app().
+        (the bus was switched off, the GPS box lost power or signal ...). Started once by create_app().
         """
         if rules.AUTO_OFFLINE_MINUTES <= 0 or getattr(self, "_auto_offline_started", False):
             return
@@ -494,7 +484,7 @@ class TrackingService:
         threading.Thread(target=check, daemon=True, name="auto-offline").start()
 
     def stop_trip(self, bus_id: str) -> dict | None:
-        """Driver went offline (or logged out): hide the bus, clear its trail, end any test drive."""
+        """The bus went offline (GPS silent, or a test drive stopped): hide it, clear its trail, end any test drive."""
         with self._lock:
             bus = self._buses.get(bus_id)
             if bus is None:
@@ -661,7 +651,7 @@ class TrackingService:
             return self._version
 
     # =====================================================================
-    # Test drive (admin): move a bus along its route without a phone
+    # Test drive (admin): move a bus along its route without a GPS box
     # =====================================================================
     def start_simulation(self, bus_id: str, speed_multiplier: float = 1.0) -> bool:
         """Start a background test drive from the route's start to Hadi Chattar. False if not possible."""

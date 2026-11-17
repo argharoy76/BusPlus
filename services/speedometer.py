@@ -1,7 +1,7 @@
 """
-A steady, honest speed for each bus from the driver's phone GPS.
+A steady, honest speed for each bus from its GPS box (ESP32 + NEO-6M).
 
-Why this is needed: a phone standing still still "moves" a few metres every second
+Why this is needed: a GPS standing still still "moves" a few metres every second
 (GPS wobble). Dividing that wobble by one second gives 4-15 km/h for a bus that is
 parked. This filter looks at the last few seconds instead of the last fix:
 
@@ -11,7 +11,7 @@ parked. This filter looks at the last few seconds instead of the last fix:
   3. STOPPED: if that velocity moved the bus less than a small circle (the GPS accuracy,
      between SPEED_STOPPED_RADIUS_M and twice that) over those seconds, the speed is 0 and
      the marker stays where it is instead of wobbling.
-  4. MOVING: the phone's own speed is used when it gives one (it comes from the Doppler
+  4. MOVING: the GPS's own speed is used when it gives one (it comes from the Doppler
      shift of the satellite signals - far more exact than distance / time); otherwise the
      fitted speed.
   5. Speeds under SPEED_MIN_KMH count as 0, and the result is smoothed a little so the
@@ -65,7 +65,7 @@ class Speedometer:
         self.moving_votes = 0
 
     def update(self, lat: float, lng: float, accuracy_m: float | None = None,
-               phone_speed_kmh: float | None = None, phone_heading: float | None = None,
+               gps_speed_kmh: float | None = None, gps_heading: float | None = None,
                fix_time: float | None = None) -> Reading:
         """Add one GPS fix and return the speed / position to show."""
         accuracy = accuracy_m if accuracy_m is not None and accuracy_m > 0 else 15.0
@@ -80,9 +80,9 @@ class Speedometer:
         oldest = self.fixes[0]
         span = now - oldest[0]
         if self.shown is None or span < MIN_SPAN_S:
-            # Not enough history yet: trust the phone's speed if it has one, else wait.
-            speed = _clean_speed(phone_speed_kmh) if phone_speed_kmh is not None else self.speed_kmh
-            return self._result(speed, lat, lng, phone_heading)
+            # Not enough history yet: trust the GPS speed if it has one, else wait.
+            speed = _clean_speed(gps_speed_kmh) if gps_speed_kmh is not None else self.speed_kmh
+            return self._result(speed, lat, lng, gps_heading)
 
         # Fit a straight line through the recent fixes (least squares): the GPS wobble
         # averages out and what is left is the real velocity, in metres per second.
@@ -93,22 +93,22 @@ class Speedometer:
         if self.speed_kmh == 0:
             radius *= 1.3                                     # standing: need a clear move to start again
 
-        if phone_speed_kmh is not None and phone_speed_kmh >= MIN_MOVING_KMH * 2:
-            moving = True                                     # the phone's Doppler speed is clear
-        elif phone_speed_kmh is not None and phone_speed_kmh < MIN_MOVING_KMH:
-            moving = moved_m > radius * 2                     # phone says standing: only a big move overrules it
+        if gps_speed_kmh is not None and gps_speed_kmh >= MIN_MOVING_KMH * 2:
+            moving = True                                     # the GPS's Doppler speed is clear
+        elif gps_speed_kmh is not None and gps_speed_kmh < MIN_MOVING_KMH:
+            moving = moved_m > radius * 2                     # GPS says standing: only a big move overrules it
         else:
             moving = moved_m > radius
 
         # Leaving "stopped" needs two moving fixes in a row (one wobble is not a start).
         self.moving_votes = self.moving_votes + 1 if moving else 0
-        if not moving or (self.speed_kmh == 0 and self.moving_votes < 2 and not _clear(phone_speed_kmh)):
+        if not moving or (self.speed_kmh == 0 and self.moving_votes < 2 and not _clear(gps_speed_kmh)):
             self.speed_kmh = 0.0
             return Reading(True, 0.0, True, None, *self.shown)
 
-        # Moving: the phone's Doppler speed, or the fitted speed.
-        measured = phone_speed_kmh if phone_speed_kmh is not None else math.hypot(v_north, v_east) * 3.6
-        heading = phone_heading
+        # Moving: the GPS's Doppler speed, or the fitted speed.
+        measured = gps_speed_kmh if gps_speed_kmh is not None else math.hypot(v_north, v_east) * 3.6
+        heading = gps_heading
         if heading is None:
             heading = math.degrees(math.atan2(v_east, v_north)) % 360
         return self._result(_clean_speed(measured), lat, lng, heading)
@@ -121,9 +121,9 @@ class Speedometer:
         return Reading(True, self.speed_kmh, self.speed_kmh == 0, heading, lat, lng)
 
 
-def _clear(phone_speed_kmh: float | None) -> bool:
-    """True when the phone itself clearly reports driving speed."""
-    return phone_speed_kmh is not None and phone_speed_kmh >= MIN_MOVING_KMH * 2
+def _clear(gps_speed_kmh: float | None) -> bool:
+    """True when the GPS itself clearly reports driving speed."""
+    return gps_speed_kmh is not None and gps_speed_kmh >= MIN_MOVING_KMH * 2
 
 
 def _clean_speed(kmh: float | None) -> float:
@@ -149,7 +149,7 @@ def _velocity(fixes: deque) -> tuple[float, float]:
 
 def _fix_time(fix_time: float | None, fixes: deque) -> float:
     """
-    When the fix was taken, in seconds. The phone's own GPS time is best (network delays
+    When the fix was taken, in seconds. The GPS's own time is best (network delays
     don't distort it); it is used when it is close to the server's clock and moves forward.
     """
     now = time.time()

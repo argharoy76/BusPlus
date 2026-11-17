@@ -1,18 +1,18 @@
 """
 Small helpers for saving to and reading from the database.
 
-The services keep a fast in-memory copy of routes, buses and drivers, and use
+The services keep a fast in-memory copy of routes, buses and GPS devices, and use
 these helpers to write every admin change straight through to the database.
 All functions must run inside a Flask app context (any request handler does).
 """
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 
 from extensions import db
-from models.records import RiderRecord, RouteRecord
-from models.seed_data import default_buses, default_routes, demo_drivers
+from models.records import ADDED_COLUMNS, RiderRecord, RouteRecord
+from models.seed_data import default_buses, default_routes
 
 
 def utc_now_iso() -> str:
@@ -39,29 +39,43 @@ def all_rows(model: type[db.Model]) -> list:
     return list(db.session.scalars(select(model)))
 
 
-def seed_defaults(with_demo_drivers: bool) -> None:
+def upgrade_tables() -> None:
     """
-    Fill an empty database with the built-in KU routes and buses
-    (and, if asked, four demo drivers with PIN 1234). Does nothing if routes exist.
+    Add columns that newer versions of BusPlus need to an older database (ADDED_COLUMNS in
+    models/records.py). `db.create_all()` makes missing tables but never changes existing ones.
     """
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+    for table, columns in ADDED_COLUMNS.items():
+        if table not in tables:
+            continue
+        have = {column["name"] for column in inspector.get_columns(table)}
+        for name, sql_type in columns.items():
+            if name not in have:
+                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+    db.session.commit()
+
+
+def seed_defaults() -> None:
+    """Fill an empty database with the built-in KU routes and buses. Does nothing if routes exist."""
     if db.session.scalar(select(RouteRecord.route_id).limit(1)) is not None:
         return
     db.session.add_all(route.to_record() for route in default_routes())
     db.session.add_all(bus.to_record() for bus in default_buses())
-    if with_demo_drivers:
-        db.session.add_all(driver.to_record() for driver in demo_drivers())
     db.session.commit()
 
 
 def record_rider(role: str, rider_id: str, full_name: str) -> None:
-    """Remember a student/teacher who opened the map (insert, or refresh name and last-seen time)."""
+    """
+    Remember a student/teacher who opened the map (insert, or refresh the last-seen time).
+    The name from the first sign-in is kept, so someone typing another person's ID can't rename them.
+    """
     now = utc_now_iso()
     rider = db.session.scalar(select(RiderRecord).filter_by(role=role, rider_id=rider_id))
     if rider is None:
         db.session.add(RiderRecord(role=role, rider_id=rider_id, full_name=full_name,
                                    first_seen_at=now, last_seen_at=now))
     else:
-        rider.full_name = full_name
         rider.last_seen_at = now
     db.session.commit()
 

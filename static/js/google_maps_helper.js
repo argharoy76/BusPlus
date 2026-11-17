@@ -1,5 +1,5 @@
 /*
- * BusPlus map helper, used by the rider map (student/teacher) and the driver map.
+ * BusPlus map helper, used by the rider map (students, teachers, staff) and the admin's Live map.
  *
  * Draws a Leaflet map with Google Maps tiles, plus everything BusPlus puts on it:
  * route lines, live bus markers (they glide between GPS fixes), the red trail each
@@ -149,14 +149,6 @@ class BusFeed {
         }
         this.onUpdate([...this.buses.values()], data.type);
     }
-
-    /** Adds what the page learnt another way (the driver's own location reply) to a known bus. */
-    merge(change) {
-        const bus = this.buses.get(change?.bus_id);
-        if (!bus) return;
-        const { trail, ...rest } = change;
-        Object.assign(bus, rest);
-    }
 }
 
 /** Everything drawn on a map; one shared instance: window.googleMapsHelper. */
@@ -176,8 +168,8 @@ class GoogleMapsHelper {
         this.tracks = {};          // bus_id -> recent GPS samples and where the marker is drawn now
         this.roadLines = {};       // route_id -> RoadLine (for moving buses along the road)
         this.clockOffset = null;   // server clock minus this browser's clock (seconds)
+        this.plainMarkers = false; // true (backend Live map): plain dots with the bus number, text layer buttons, no icons
         this.animating = false;
-        this.onFrame = null;       // optional: called (bus_id, [lat, lng]) every frame (driver map: follow)
         this.studentMarker = null;
         this.studentAccuracyCircle = null;
         this.homeMarker = null;
@@ -239,11 +231,12 @@ class GoogleMapsHelper {
             traffic: '<rect x="7.5" y="2.5" width="9" height="19" rx="3"/><circle cx="12" cy="7" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="17" r="1.6" fill="currentColor"/>'
         };
         const buttons = this.layerList.map(layer => [layer.key, layer.label, ICONS[layer.key] || ICONS.roadmap]);
+        const plain = this.plainMarkers;                  // backend: the buttons say "Map", "Satellite", "Traffic"
 
         const switcher = document.createElement("div");
-        switcher.className = "gmap-layer-selector";
+        switcher.className = "gmap-layer-selector" + (plain ? " gmap-layer-selector-text" : "");
         switcher.innerHTML = buttons.map(([layer, label, paths], i) =>
-            `<button type="button" class="gmap-layer-btn${i === 0 ? " active" : ""}" data-layer="${escapeHtml(layer)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${icon(paths)}</button>`
+            `<button type="button" class="gmap-layer-btn${i === 0 ? " active" : ""}" data-layer="${escapeHtml(layer)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${plain ? escapeHtml(label) : icon(paths)}</button>`
         ).join("");
 
         switcher.querySelectorAll(".gmap-layer-btn").forEach(btn => {
@@ -310,15 +303,24 @@ class GoogleMapsHelper {
                 box?.style.setProperty("--bus-color", color);
                 box?.classList.toggle("is-stale", this.isStale(bus));
                 const speedTag = el.querySelector(".gmap-bus-speed-tag");
-                const label = MT("{speed} km/h", { speed });
+                const label = this.markerLabel(bus, speed);
                 if (speedTag && speedTag.textContent !== label) speedTag.textContent = label;
             }
-            // Keep an open popup (driver map) in step with the live data
+            // Keep an open popup (admin Live map) in step with the live data
             if (marker.getPopup()?.isOpen()) marker.setPopupContent(this.busPopupHtml(bus, speed, heading));
             return;
         }
 
-        const icon = L.divIcon({
+        const icon = this.plainMarkers ? L.divIcon({
+            className: "gmap-bus-marker-wrap",
+            html: `
+                <div class="gmap-bus-container gmap-plain" style="--bus-color: ${escapeHtml(color)};" title="${escapeHtml(bus.bus_name || bus.bus_number)}">
+                    <div class="gmap-plain-dot"></div>
+                    <div class="gmap-bus-speed-tag">${escapeHtml(this.markerLabel(bus, speed))}</div>
+                </div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        }) : L.divIcon({
             className: "gmap-bus-marker-wrap",
             html: `
                 <div class="gmap-bus-container" style="--bus-color: ${escapeHtml(color)};" title="${escapeHtml(bus.bus_name || bus.bus_number)}">
@@ -465,10 +467,15 @@ class GoogleMapsHelper {
             const tail = tip.getLatLngs()[0];
             tip.setLatLngs([tail, pos]);
         }
-        if (this.onFrame) this.onFrame(id, pos);
     }
 
-    /** Popup shown when a bus is tapped on the driver map. */
+    /** Popup shown when a bus is tapped on the admin's Live map. */
+    /** Text under a bus marker: its speed, or (backend) its number and speed. */
+    markerLabel(bus, speed) {
+        const kmh = MT("{speed} km/h", { speed });
+        return this.plainMarkers ? `${bus.bus_number} · ${kmh}` : kmh;
+    }
+
     busPopupHtml(bus, speed, heading) {
         return `
             <div class="gmap-card-popup">

@@ -1,8 +1,7 @@
 """
 WHO USES THE APP - the buttons on the start page.
 
-The Driver button is always first. After it comes one button for every entry
-in RIDER_TYPES below. Each rider type automatically gets EVERYTHING:
+There is one button for every entry in RIDER_TYPES below, in this order. Each rider type automatically gets EVERYTHING:
   * a button on the start page
   * its own sign-in page   (/<key>/login)   asking for name + ID
   * its own live map       (/<key>/dashboard) showing only "its" buses
@@ -34,13 +33,6 @@ addresses: use lowercase English letters only, no spaces.
 """
 
 RIDER_TYPES = {
-    "student": {
-        "label": "Student",
-        "plural": "Students",
-        "id_label": "Student ID",
-        "icon": "cap",
-        "color": "#059669",
-    },
     "teacher": {
         "label": "Teacher",
         "plural": "Teachers",
@@ -48,11 +40,21 @@ RIDER_TYPES = {
         "icon": "briefcase",
         "color": "#7C3AED",
     },
+    "student": {
+        "label": "Student",
+        "plural": "Students",
+        "id_label": "Student ID",
+        "icon": "cap",
+        "color": "#059669",
+    },
+    "staff": {
+        "label": "Staff",
+        "plural": "Staff",
+        "id_label": "Staff ID",
+        "icon": "id",
+        "color": "#EA580C",
+    },
 }
 
-# The Driver button on the start page.
-DRIVER = {
-    "label": "Driver",
-    "icon": "steering",
-    "color": "#0866FF",
-}
+# New buses are for this type until the admin changes it (backend > Buses). Must be a key above.
+DEFAULT_RIDER_TYPE = "student"

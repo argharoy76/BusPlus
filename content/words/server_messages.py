@@ -5,41 +5,28 @@ Change only the right side of each line. (Help: content/words/__init__.py)
 
 # fmt: off
 WORDS = {
-    # ---- Sign-in (driver, student, teacher, admin) ----
+    # ---- Sign-in (riders and admin) ----
     "Welcome, {name}": "Welcome, {name}",
     "Logged out.": "Logged out.",
     "Wrong username or password.": "Wrong username or password.",
     "Admin sign-in required.": "Admin sign-in required.",
-    "Please enter or select your driver name.": "Please enter or select your driver name.",
-    "Driver not found. Please pick your name from the list.": "Driver not found. Please pick your name from the list.",
-    "Incorrect PIN.": "Incorrect PIN.",
-    "That isn't your route. Please choose the route of your assigned bus.": "That isn't your route. Please choose the route of your assigned bus.",  # noqa: E501
-    "Account '{name}' is already logged in on another device. Log out there first, or ask the admin to unlock it.": "Account '{name}' is already logged in on another device. Log out there first, or ask the admin to unlock it.",  # noqa: E501
     "Please enter your name and {id_label}.": "Please enter your name and {id_label}.",
-    "Please log in as a driver.": "Please log in as a driver.",
-    "This account was signed in on another device. Please log in again.": "This account was signed in on another device. Please log in again.",  # noqa: E501
-    "No bus is assigned to you. Ask the admin.": "No bus is assigned to you. Ask the admin.",
 
-    # ---- Driver's duty card ({day} = day name from bus_schedule.py, {date} = e.g. 31 October) ----
-    "{day}, {date} {month}": "{day}, {date} {month}",
-
-    # ---- Drivers (backend) ----
-    "Driver '{name}' added.": "Driver '{name}' added.",
-    "Driver '{name}' updated.": "Driver '{name}' updated.",
-    "Driver {id} not found.": "Driver {id} not found.",
-    "Driver {id} can now sign in on any phone.": "Driver {id} can now sign in on any phone.",
-    "Driver {id} deleted.": "Driver {id} deleted.",
-    "Driver name is required.": "Driver name is required.",
-    "There is already a driver called {name}. Use a different name so they can log in.": "There is already a driver called {name}. Use a different name so they can log in.",  # noqa: E501
-    "PIN must be {min} to {max} digits.": "PIN must be {min} to {max} digits.",
-    "Please choose the driver's bus.": "Please choose the driver's bus.",
+    # ---- GPS devices (backend) ----
+    "Device '{name}' added.": "Device '{name}' added.",
+    "Device '{name}' updated.": "Device '{name}' updated.",
+    "Device {id} not found.": "Device {id} not found.",
+    "Device {id} deleted.": "Device {id} deleted.",
+    "Device name is required.": "Device name is required.",
+    "{bus} already has {device}. Take that device off the bus first.": "{bus} already has {device}. Take that device off the bus first.",  # noqa: E501
+    "New key made. The old one no longer works.": "New key made. The old one no longer works.",
 
     # ---- Buses (backend) ----
     "{bus} added.": "{bus} added.",
     "{bus} updated.": "{bus} updated.",
     "Bus {id} not found.": "Bus {id} not found.",
     "Bus {id} deleted.": "Bus {id} deleted.",
-    "{names} is assigned to this bus. Move them to another bus in Drivers first.": "{names} is assigned to this bus. Move them to another bus in Drivers first.",  # noqa: E501
+    "{device} is fitted to this bus. Move it to another bus in GPS devices first.": "{device} is fitted to this bus. Move it to another bus in GPS devices first.",  # noqa: E501
     "{bus} is on a live trip. Stop the trip before changing its route.": "{bus} is on a live trip. Stop the trip before changing its route.",  # noqa: E501
     "{bus} is on a live trip. Stop the trip before deleting it.": "{bus} is on a live trip. Stop the trip before deleting it.",  # noqa: E501
     "Bus number is required (e.g. KU Bus #05).": "Bus number is required (e.g. KU Bus #05).",
@@ -83,11 +70,14 @@ WORDS = {
     "{day} {part}: enter a time for every bus.": "{day} {part}: enter a time for every bus.",
     "{day} {part}: bus {bus} doesn't exist.": "{day} {part}: bus {bus} doesn't exist.",
 
-    # ---- Live GPS (driver's phone) ----
+    # ---- Answers to the GPS boxes (shown on the ESP32's serial monitor) ----
+    "Unknown device key.": "Unknown device key.",
+    "Send the report as JSON.": "Send the report as JSON.",
     "Valid latitude and longitude are required.": "Valid latitude and longitude are required.",
-    "Latitude/longitude out of range.": "Latitude/longitude out of range.",
+    "The GPS has no position yet (0, 0).": "The GPS has no position yet (0, 0).",
+    "This device is not fitted to a bus. Choose its bus in the backend.": "This device is not fitted to a bus. Choose its bus in the backend.",  # noqa: E501
 
-    # ---- Arrival alerts (student / teacher map; {bus} = bus name, {stop} = their Home stop) ----
+    # ---- Arrival alerts (rider map; {bus} = bus name, {stop} = their Home stop) ----
     "{bus} is offline": "{bus} is offline",
     "{bus} has passed {stop}": "{bus} has passed {stop}",
     "{bus} is at {stop}!": "{bus} is at {stop}!",
@@ -106,7 +96,22 @@ WORDS = {
     "Too many attempts. Please wait a minute and try again.": "Too many attempts. Please wait a minute and try again.",
     "Something went wrong on the server. Please try again.": "Something went wrong on the server. Please try again.",
 
-    # ---- Background GPS (Traccar Client) ----
-    "New key made. The old one no longer works.": "New key made. The old one no longer works.",
+    # ---- GPS boxes that join by themselves, quick add, on / off the map ----
+    "Another box with this chip ID is already waiting.": "Another box with this chip ID is already waiting.",
+    "Box {chip} rejected.": "Box {chip} rejected.",
+    "GPS box {number}": "GPS box {number}",
+    "Say whether to show the bus on the map.": "Say whether to show the bus on the map.",
+    "Send the box's chip ID and its pairing token.": "Send the box's chip ID and its pairing token.",
+    "That box is no longer waiting. It may have stopped asking.": "That box is no longer waiting. It may have stopped asking.",
+    "The admin did not approve this box.": "The admin did not approve this box.",
+    "Too many boxes are waiting. Approve or reject some in the backend.": "Too many boxes are waiting. Approve or reject some in the backend.",
+    "Tracker in {bus}": "Tracker in {bus}",
+    "{name} approved. The box gets its key in a few seconds.": "{name} approved. The box gets its key in a few seconds.",
+    "{name} is off the map. Its bus is hidden on every map.": "{name} is off the map. Its bus is hidden on every map.",
+    "{name} is on the map. Its bus shows with its next GPS position.": "{name} is on the map. Its bus shows with its next GPS position.",
+
+    # ---- Rider sign-in checks ----
+    "Please enter your real name (letters only).": "Please enter your real name (letters only).",
+    "{id_label} may only use letters, numbers and - _ / .": "{id_label} may only use letters, numbers and - _ / .",
 }
 # fmt: on

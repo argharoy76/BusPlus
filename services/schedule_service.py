@@ -6,7 +6,7 @@ For every day of the week a route has
   * afternoon trips: which bus, and the time it LEAVES the campus
 A day without trips means no bus that day.
 
-Students, teachers and drivers only see TODAY's timetable (Bangladesh date) in the
+Riders only see TODAY's timetable (Bangladesh date) in the
 "Bus schedule" pop-up. Times are stored as 24-hour "HH:MM".
 """
 
@@ -90,7 +90,9 @@ def save_timetable(route_id: str, data: dict) -> dict:
     unknown = set(raw_days) - set(DAYS)
     if unknown:
         raise ValueError(say("Unknown day: {days}.", days=", ".join(sorted(unknown))))
-    days = {day: {part: _clean_trips(raw_days.get(day, {}).get(part), DAY_NAMES[day], part) for part in PARTS}
+    if any(parts is not None and not isinstance(parts, dict) for parts in raw_days.values()):
+        raise ValueError(say("The timetable is not valid."))
+    days = {day: {part: _clean_trips((raw_days.get(day) or {}).get(part), DAY_NAMES[day], part) for part in PARTS}
             for day in DAYS}
     store.save(TimetableRecord(route_id=route_id, days=days))
     return next(t for t in all_timetables() if t["route_id"] == route_id)
@@ -122,8 +124,10 @@ def _clean_trips(trips, day_name: str, part: str) -> list[dict]:
         raise ValueError(say("{day} {part}: at most {count} buses.", day=day_name, part=part, count=MAX_TRIPS))
     clean = []
     for trip in trips:
-        time = str((trip or {}).get("time") or "").strip()
-        bus_id = str((trip or {}).get("bus_id") or "").strip()
+        if not isinstance(trip, dict):
+            raise ValueError(say("The timetable is not valid."))
+        time = str(trip.get("time") or "").strip()
+        bus_id = str(trip.get("bus_id") or "").strip()
         if not TIME_24H_RE.match(time):
             raise ValueError(say("{day} {part}: enter a time for every bus.", day=day_name, part=part))
         if bus_id and tracking.get_bus(bus_id) is None:
